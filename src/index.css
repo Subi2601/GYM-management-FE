@@ -1,0 +1,296 @@
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@import "@fontsource/plus-jakarta-sans/800.css";
+@import "@fontsource/bebas-neue/400.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Stag Performance theme. Colours are RGB channels so Tailwind opacity modifiers work
+ * (`bg-accent/10`). `.theme-light` re-applies the white palette inside a dark page
+ * (invoice, printed sheets); print always uses it.
+ */
+:root,
+.theme-light {
+  --main: 244 245 248;
+  --surface: 255 255 255;
+  --subtle: 248 250 252;
+  --hover: 241 245 249;
+  --primary-grey: 30 41 59;
+  --secondary-grey: 71 85 105;
+  --ink: 15 23 42;
+  --muted: 100 116 139;
+  --faint: 203 213 225;
+
+  --accent: 201 52 52;
+  --accent-light: 253 238 238;
+  --accent-dark: 173 42 42;
+
+  --line: 226 232 240;
+  --line-light: 241 245 249;
+  --line-strong: 203 213 225;
+  --line-accent: 239 95 95;
+
+  --success: 21 128 61;
+  --success-soft: 220 252 231;
+  --success-line: 187 247 208;
+  --warning: 180 83 9;
+  --warning-soft: 254 243 199;
+  --warning-line: 253 230 138;
+  --danger: 185 28 28;
+  --danger-soft: 254 226 226;
+  --danger-line: 254 202 202;
+  --info: 3 105 161;
+  --info-soft: 224 242 254;
+  --info-line: 186 230 253;
+  --plum: 126 34 206;
+  --plum-soft: 243 232 255;
+  --plum-line: 233 213 255;
+
+  --grad: linear-gradient(135deg, #ef5f5f 0%, #d63a3a 55%, #ad2a2a 100%);
+  --grad-text: linear-gradient(100deg, #ef6b6b 0%, #d63a3a 60%, #e05555 100%);
+  --glow: 0 10px 24px -12px rgba(180, 35, 35, 0.32);
+  --ring: rgba(214, 58, 58, 0.12);
+  --row-hover: rgba(214, 58, 58, 0.035);
+  --app-bg: radial-gradient(700px 500px at 92% -8%, rgba(214, 58, 58, 0.035), transparent 60%), #f4f5f8;
+  --side-bg: #ffffff;
+  --header-bg: rgba(255, 255, 255, 0.82);
+  --card-tint: rgba(214, 58, 58, 0.035);
+
+  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-premium: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04),
+    0 10px 15px -3px rgba(0, 0, 0, 0.03);
+  color-scheme: light;
+}
+
+:root {
+  --sidebar-width: 260px;
+  --header-height: 70px;
+  /* legacy names still referenced by a few arbitrary values */
+  --accent-red-light: rgb(var(--accent-light));
+}
+
+.dark {
+  --main: 13 13 15;
+  --surface: 24 20 23;
+  --subtle: 31 27 30;
+  --hover: 38 32 36;
+  --primary-grey: 228 228 231;
+  --secondary-grey: 190 190 198;
+  --ink: 244 244 245;
+  --muted: 161 161 170;
+  --faint: 82 82 91;
+
+  --accent: 240 112 112;
+  --accent-light: 52 24 27;
+  --accent-dark: 214 58 58;
+
+  --line: 46 40 44;
+  --line-light: 36 31 34;
+  --line-strong: 63 56 61;
+  --line-accent: 240 112 112;
+
+  --success: 74 222 128;
+  --success-soft: 20 46 31;
+  --success-line: 30 80 50;
+  --warning: 251 191 36;
+  --warning-soft: 52 40 14;
+  --warning-line: 90 68 20;
+  --danger: 255 120 120;
+  --danger-soft: 60 22 25;
+  --danger-line: 100 36 40;
+  --info: 125 211 252;
+  --info-soft: 16 40 56;
+  --info-line: 26 70 96;
+  --plum: 216 180 254;
+  --plum-soft: 44 26 62;
+  --plum-line: 72 44 100;
+
+  --glow: 0 0 18px rgba(214, 58, 58, 0.22);
+  --ring: rgba(214, 58, 58, 0.2);
+  --row-hover: rgba(214, 58, 58, 0.06);
+  --app-bg: radial-gradient(900px 620px at 100% 0%, rgba(214, 58, 58, 0.11), transparent 62%),
+    radial-gradient(760px 600px at 0% 100%, rgba(214, 58, 58, 0.05), transparent 60%),
+    linear-gradient(135deg, #0d0d0f 0%, #110d0e 50%, #1a0e10 100%);
+  --side-bg: linear-gradient(180deg, #131315 0%, #171113 100%);
+  --header-bg: rgba(18, 12, 14, 0.6);
+  --card-tint: rgba(214, 58, 58, 0.06);
+
+  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-premium: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+/* The white palette inside a dark page carries its own base colours. */
+.theme-light {
+  color: rgb(var(--ink));
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--app-bg);
+    background-attachment: fixed;
+    min-height: 100vh;
+    color: rgb(var(--ink));
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button {
+    opacity: 0.6;
+  }
+}
+
+@layer components {
+  /* Typography — page titles use the portfolio's display face */
+  .section-title {
+    @apply m-0 font-display text-[40px] font-normal leading-none tracking-[1.5px] text-ink;
+  }
+  .text-gradient {
+    @apply bg-grad-text bg-clip-text text-transparent;
+  }
+
+  /* Cards: faint red tint from the top corner */
+  .standard-card,
+  .table-container-card {
+    @apply relative overflow-hidden rounded-2xl border border-line bg-surface shadow-premium;
+    background-image: linear-gradient(160deg, var(--card-tint), transparent 55%);
+  }
+  .standard-card {
+    @apply p-6;
+  }
+  .card-hover {
+    @apply transition-all duration-[250ms] ease-out hover:-translate-y-1 hover:border-accent hover:shadow-glow;
+  }
+
+  /* Icons drawn with stroke SVGs, as in the original */
+  .svg-icon {
+    @apply h-[18px] w-[18px] fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:2];
+  }
+
+  /* Forms */
+  .form-grid-modern {
+    @apply grid grid-cols-1 gap-5 md:grid-cols-2;
+  }
+  .form-label {
+    @apply text-xs font-bold uppercase tracking-[0.04em] text-secondary-grey;
+  }
+  .form-control {
+    @apply w-full rounded-[10px] border border-line bg-subtle px-4 py-3 text-sm font-medium text-ink transition-all duration-200
+      placeholder:text-muted hover:border-line-strong focus:border-accent focus:bg-surface focus:outline-none
+      disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .form-control:focus {
+    box-shadow: 0 0 0 4px var(--ring);
+  }
+  .form-control.invalid {
+    @apply border-accent bg-accent-light/40;
+  }
+  .form-actions-modern {
+    @apply mt-8 flex flex-col justify-end gap-3 border-t border-line pt-6 md:flex-row;
+  }
+
+  /* Sidebar navigation: gradient sweep on hover, soft red wash + bar when active */
+  .nav-item {
+    @apply flex cursor-pointer items-center gap-3 rounded-[11px] px-4 py-3 text-sm font-semibold text-secondary-grey no-underline;
+    background-image: linear-gradient(90deg, rgb(var(--accent) / 0.1), transparent);
+    background-size: 0% 100%;
+    background-repeat: no-repeat;
+    transition: background-size 0.3s ease, color 0.2s ease;
+  }
+  .nav-item:hover {
+    @apply text-ink;
+    background-size: 100% 100%;
+  }
+  .nav-item.active {
+    @apply rounded-l-none text-accent;
+    background-size: 100% 100%;
+    box-shadow: inset 3px 0 0 rgb(var(--accent));
+  }
+  .nav-item.active svg {
+    @apply text-accent;
+  }
+
+  /* Small status pill buttons inside table rows (Renew / Follow-up / Convert / Terminate) */
+  .btn-status-action {
+    @apply inline-flex h-9 items-center whitespace-nowrap rounded-lg border px-3 text-xs font-bold transition-all duration-200 hover:-translate-y-px;
+  }
+  .btn-red {
+    @apply border-accent/30 bg-accent-light text-accent hover:border-transparent hover:bg-grad hover:text-white hover:shadow-glow;
+  }
+  .btn-yellow {
+    @apply border-warning-line bg-warning-soft text-warning hover:bg-warning hover:text-white;
+  }
+  .btn-green {
+    @apply border-success-line bg-success-soft text-success hover:bg-success hover:text-white;
+  }
+  .btn-grey {
+    @apply border-line bg-surface text-secondary-grey hover:border-secondary-grey hover:text-ink;
+  }
+
+  /* Square icon buttons in the actions column */
+  .action-icon {
+    @apply flex h-9 w-9 cursor-pointer items-center justify-center rounded-[9px] border border-line bg-surface p-0 text-secondary-grey
+      transition-all duration-200 hover:-translate-y-px hover:border-accent hover:bg-accent-light hover:text-accent;
+  }
+  .action-icon.view {
+    @apply hover:border-info hover:bg-info-soft hover:text-info;
+  }
+  .action-icon.edit {
+    @apply hover:border-success hover:bg-success-soft hover:text-success;
+  }
+  .action-icon.delete {
+    @apply hover:border-accent hover:bg-accent-light hover:text-accent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    transform: none !important;
+  }
+}
+
+/* Print: white paper, no app chrome (invoice, diet plan, reports) */
+@media print {
+  .no-print,
+  .app-sidebar,
+  .app-header {
+    display: none !important;
+  }
+  :root.dark {
+    --main: 244 245 248;
+    --surface: 255 255 255;
+    --subtle: 248 250 252;
+    --hover: 241 245 249;
+    --ink: 15 23 42;
+    --muted: 100 116 139;
+    --secondary-grey: 71 85 105;
+    --primary-grey: 30 41 59;
+    --line: 226 232 240;
+    --line-light: 241 245 249;
+    --accent: 201 52 52;
+    --accent-light: 253 238 238;
+  }
+  body {
+    background: white !important;
+    color: #0f172a !important;
+  }
+  .app-main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
