@@ -202,10 +202,10 @@ function CollectionStats({ stats, loading }: { stats: PaymentStats | undefined; 
   const v = (n: number | undefined) => (loading || n === undefined ? "…" : formatINR(n, true));
   return (
     <div className="mt-6 grid grid-cols-[1fr_2fr] gap-6 max-lg:grid-cols-1">
-      <div className="flex flex-col rounded-2xl bg-gradient-to-br from-primary-grey to-[#334155] p-8 text-white shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1)]">
-        <div className="mb-2 text-sm font-semibold uppercase tracking-[0.05em] opacity-80">Today&apos;s Total Collection</div>
-        <div className="mb-6 text-4xl font-extrabold text-success">{v(stats?.today)}</div>
-        <div className="flex flex-wrap gap-6 border-t border-white/10 pt-6">
+      <div className="hero-card flex flex-col rounded-2xl p-8 shadow-premium">
+        <div className="hero-muted mb-2 text-sm font-semibold">Today&apos;s Total Collection</div>
+        <div className="mb-6 font-display text-[44px] font-bold leading-none text-success tabular-nums">{v(stats?.today)}</div>
+        <div className="flex flex-wrap gap-6 border-t border-line-accent/60 pt-6">
           <div className="flex items-center gap-2.5 text-sm">
             <span className="h-2 w-2 rounded-full bg-[#fbbf24]" />
             Cash: <strong className="text-base">{v(stats?.today_cash)}</strong>

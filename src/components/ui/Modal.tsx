@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
+import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
 
 /** Open modals, innermost last — Escape only closes the top one when modals are stacked. */
@@ -41,28 +42,27 @@ export function Modal({ open, title, onClose, width = "800px", children, bodyCla
 
   return (
     <div
-      className="fixed inset-0 z-[2000] flex animate-fadeIn items-center justify-center bg-[rgba(17,24,39,0.4)] backdrop-blur-[4px]"
+      className="fixed inset-0 z-[2000] flex animate-fadeIn items-center justify-center bg-[var(--backdrop)] backdrop-blur-[3px]"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="relative max-h-[90vh] w-[95%] animate-slideUp overflow-y-auto rounded-2xl border border-line bg-surface shadow-modal"
+        className="relative max-h-[90vh] w-[95%] animate-slideUp overflow-y-auto rounded-[18px] border border-line bg-surface shadow-modal"
         style={{ maxWidth: width }}
       >
-        <div className="sticky top-0 z-10 h-[3px] bg-grad" aria-hidden="true" />
-        <div className="sticky top-[3px] z-10 flex items-center justify-between border-b border-line-light bg-subtle px-8 py-5">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-line bg-surface/95 px-7 py-[18px] backdrop-blur-[6px]">
           <h3 className="m-0 text-lg font-extrabold tracking-[-0.01em] text-ink">{title}</h3>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-lg text-muted transition-all hover:border-accent hover:text-accent"
+            className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] border border-line bg-surface text-muted transition-all hover:border-line-accent hover:text-accent"
           >
-            &times;
+            <Icon name="x" className="h-4 w-4" />
           </button>
         </div>
-        <div className={cn("p-8", bodyClassName)}>{children}</div>
+        <div className={cn("px-7 py-6", bodyClassName)}>{children}</div>
       </div>
     </div>
   );

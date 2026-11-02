@@ -31,8 +31,9 @@ export default {
         plum: { DEFAULT: c("plum"), soft: c("plum-soft"), line: c("plum-line") },
       },
       fontFamily: {
-        sans: ["'Plus Jakarta Sans'", "-apple-system", "BlinkMacSystemFont", "'Segoe UI'", "Roboto", "sans-serif"],
-        display: ["'Bebas Neue'", "'Plus Jakarta Sans'", "sans-serif"],
+        sans: ["Manrope", "-apple-system", "BlinkMacSystemFont", "'Segoe UI'", "Roboto", "sans-serif"],
+        // Condensed sports face for page titles, KPI numbers and the logo — always uppercase.
+        display: ["'Barlow Condensed'", "'Arial Narrow'", "sans-serif"],
       },
       backgroundImage: {
         grad: "var(--grad)",
@@ -43,7 +44,7 @@ export default {
         premium: "var(--shadow-premium)",
         glow: "var(--glow)",
         "btn-primary": "0 6px 14px -8px rgba(180, 35, 35, 0.45)",
-        modal: "0 20px 25px -5px rgba(0, 0, 0, 0.18), 0 10px 10px -5px rgba(0, 0, 0, 0.06)",
+        modal: "0 24px 60px -20px rgba(23, 22, 26, 0.35)",
         dropdown: "0 10px 25px rgba(0, 0, 0, 0.18)",
       },
       spacing: {

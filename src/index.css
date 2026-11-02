@@ -1,97 +1,127 @@
-@import "@fontsource/plus-jakarta-sans/400.css";
-@import "@fontsource/plus-jakarta-sans/500.css";
-@import "@fontsource/plus-jakarta-sans/600.css";
-@import "@fontsource/plus-jakarta-sans/700.css";
-@import "@fontsource/plus-jakarta-sans/800.css";
-@import "@fontsource/bebas-neue/400.css";
+@import "@fontsource/manrope/400.css";
+@import "@fontsource/manrope/500.css";
+@import "@fontsource/manrope/600.css";
+@import "@fontsource/manrope/700.css";
+@import "@fontsource/manrope/800.css";
+@import "@fontsource/barlow-condensed/500.css";
+@import "@fontsource/barlow-condensed/600.css";
+@import "@fontsource/barlow-condensed/700.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /*
- * Stag Performance theme. Colours are RGB channels so Tailwind opacity modifiers work
- * (`bg-accent/10`). `.theme-light` re-applies the white palette inside a dark page
- * (invoice, printed sheets); print always uses it.
+ * Stag Performance theme. White = white + a very mild red wash; dark = black + red gradient.
+ * Colours are RGB channels so Tailwind opacity modifiers work (`bg-accent/10`).
+ * `.theme-light` re-applies the white palette inside a dark page (invoice, printed sheets);
+ * print always uses it. Sidebar / hero tokens are plain CSS values used by the classes below.
  */
 :root,
 .theme-light {
-  --main: 244 245 248;
+  --main: 245 244 246;
   --surface: 255 255 255;
-  --subtle: 248 250 252;
-  --hover: 241 245 249;
-  --primary-grey: 30 41 59;
-  --secondary-grey: 71 85 105;
-  --ink: 15 23 42;
-  --muted: 100 116 139;
-  --faint: 203 213 225;
+  --subtle: 250 249 251;
+  --hover: 244 242 245;
+  --primary-grey: 39 36 43;
+  --secondary-grey: 61 58 67;
+  --ink: 23 22 26;
+  --muted: 110 106 118;
+  --faint: 213 209 218;
 
   --accent: 201 52 52;
-  --accent-light: 253 238 238;
+  --accent-light: 253 239 239;
   --accent-dark: 173 42 42;
 
-  --line: 226 232 240;
-  --line-light: 241 245 249;
-  --line-strong: 203 213 225;
-  --line-accent: 239 95 95;
+  --line: 231 228 234;
+  --line-light: 242 239 243;
+  --line-strong: 213 209 218;
+  --line-accent: 243 198 198;
 
   --success: 21 128 61;
-  --success-soft: 220 252 231;
+  --success-soft: 231 245 236;
   --success-line: 187 247 208;
   --warning: 180 83 9;
-  --warning-soft: 254 243 199;
+  --warning-soft: 253 242 223;
   --warning-line: 253 230 138;
   --danger: 185 28 28;
   --danger-soft: 254 226 226;
   --danger-line: 254 202 202;
   --info: 3 105 161;
-  --info-soft: 224 242 254;
+  --info-soft: 229 241 249;
   --info-line: 186 230 253;
   --plum: 126 34 206;
   --plum-soft: 243 232 255;
   --plum-line: 233 213 255;
 
-  --grad: linear-gradient(135deg, #ef5f5f 0%, #d63a3a 55%, #ad2a2a 100%);
+  --grad: linear-gradient(135deg, #f26b6b 0%, #e04646 55%, #c93a3a 100%);
   --grad-text: linear-gradient(100deg, #ef6b6b 0%, #d63a3a 60%, #e05555 100%);
-  --glow: 0 10px 24px -12px rgba(180, 35, 35, 0.32);
-  --ring: rgba(214, 58, 58, 0.12);
+  --glow: 0 10px 22px -12px rgba(214, 58, 58, 0.4);
+  --ring: rgba(214, 58, 58, 0.14);
   --row-hover: rgba(214, 58, 58, 0.035);
-  --app-bg: radial-gradient(700px 500px at 92% -8%, rgba(214, 58, 58, 0.035), transparent 60%), #f4f5f8;
-  --side-bg: #ffffff;
-  --header-bg: rgba(255, 255, 255, 0.82);
-  --card-tint: rgba(214, 58, 58, 0.035);
+  --app-bg: radial-gradient(900px 600px at 100% 0%, rgba(214, 58, 58, 0.06), transparent 60%),
+    radial-gradient(700px 500px at 15% 100%, rgba(214, 58, 58, 0.035), transparent 60%), #f5f4f6;
+  --header-bg: rgba(255, 255, 255, 0.85);
+  --card-tint: rgba(214, 58, 58, 0.02);
+  --backdrop: rgba(23, 22, 26, 0.42);
 
-  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-premium: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04),
-    0 10px 15px -3px rgba(0, 0, 0, 0.03);
+  /* Hero (dashboard welcome): soft blush in white */
+  --hero-bg: radial-gradient(520px 260px at 100% 0%, rgba(236, 91, 91, 0.16), transparent 70%),
+    linear-gradient(135deg, #fff7f7 0%, #fdeaea 100%);
+  --hero-line: #f6d6d6;
+  --hero-ink: #17161a;
+  --hero-muted: #7b6166;
+  --hero-chip-bg: rgba(214, 58, 58, 0.08);
+  --hero-chip-line: rgba(214, 58, 58, 0.16);
+  --hero-watermark: rgba(214, 58, 58, 0.07);
+
+  /* Sidebar: white fading into a light blush */
+  --side-bg: radial-gradient(280px 240px at 0% 100%, rgba(236, 91, 91, 0.09), transparent 70%),
+    linear-gradient(180deg, #ffffff 0%, #fffafa 50%, #fdf2f2 100%);
+  --side-ink: #2c2930;
+  --side-strong: #17161a;
+  --side-muted: #6e6a76;
+  --side-faint: #a39da9;
+  --side-hover: rgba(214, 58, 58, 0.05);
+  --side-active: rgba(214, 58, 58, 0.08);
+  --side-line: #f1e6e8;
+  --side-accent: #d63a3a;
+  --side-card: rgba(255, 255, 255, 0.75);
+  --side-card-hover: #ffffff;
+  --side-avatar: linear-gradient(135deg, #fde6e6, #f9d3d3);
+  --side-avatar-ink: #a82d2d;
+
+  --shadow-subtle: 0 1px 2px 0 rgba(23, 22, 26, 0.04);
+  --shadow-premium: 0 1px 2px rgba(23, 22, 26, 0.04), 0 6px 18px -8px rgba(23, 22, 26, 0.1);
+  --shadow-input: inset 0 1px 2px rgba(23, 22, 26, 0.03);
   color-scheme: light;
 }
 
 :root {
-  --sidebar-width: 260px;
-  --header-height: 70px;
+  --sidebar-width: 256px;
+  --header-height: 64px;
   /* legacy names still referenced by a few arbitrary values */
   --accent-red-light: rgb(var(--accent-light));
 }
 
 .dark {
-  --main: 13 13 15;
-  --surface: 24 20 23;
-  --subtle: 31 27 30;
-  --hover: 38 32 36;
+  --main: 13 12 15;
+  --surface: 24 21 26;
+  --subtle: 30 26 32;
+  --hover: 38 33 40;
   --primary-grey: 228 228 231;
-  --secondary-grey: 190 190 198;
-  --ink: 244 244 245;
-  --muted: 161 161 170;
-  --faint: 82 82 91;
+  --secondary-grey: 205 201 210;
+  --ink: 243 242 245;
+  --muted: 153 148 159;
+  --faint: 82 77 88;
 
   --accent: 240 112 112;
   --accent-light: 52 24 27;
   --accent-dark: 214 58 58;
 
-  --line: 46 40 44;
-  --line-light: 36 31 34;
-  --line-strong: 63 56 61;
+  --line: 43 38 46;
+  --line-light: 34 30 37;
+  --line-strong: 59 53 63;
   --line-accent: 240 112 112;
 
   --success: 74 222 128;
@@ -110,18 +140,44 @@
   --plum-soft: 44 26 62;
   --plum-line: 72 44 100;
 
+  --grad: linear-gradient(135deg, #ec5b5b 0%, #d63a3a 55%, #b3302f 100%);
   --glow: 0 0 18px rgba(214, 58, 58, 0.22);
-  --ring: rgba(214, 58, 58, 0.2);
+  --ring: rgba(232, 84, 84, 0.22);
   --row-hover: rgba(214, 58, 58, 0.06);
   --app-bg: radial-gradient(900px 620px at 100% 0%, rgba(214, 58, 58, 0.11), transparent 62%),
     radial-gradient(760px 600px at 0% 100%, rgba(214, 58, 58, 0.05), transparent 60%),
-    linear-gradient(135deg, #0d0d0f 0%, #110d0e 50%, #1a0e10 100%);
-  --side-bg: linear-gradient(180deg, #131315 0%, #171113 100%);
-  --header-bg: rgba(18, 12, 14, 0.6);
+    linear-gradient(135deg, #0d0c0f 0%, #110d0e 50%, #1a0e10 100%);
+  --header-bg: rgba(16, 13, 16, 0.7);
   --card-tint: rgba(214, 58, 58, 0.06);
+  --backdrop: rgba(0, 0, 0, 0.6);
+
+  --hero-bg: radial-gradient(520px 260px at 100% 0%, rgba(236, 91, 91, 0.3), transparent 70%),
+    linear-gradient(120deg, #1f1a20 0%, #2a161b 100%);
+  --hero-line: rgba(255, 255, 255, 0.06);
+  --hero-ink: #ffffff;
+  --hero-muted: rgba(255, 255, 255, 0.7);
+  --hero-chip-bg: rgba(255, 255, 255, 0.1);
+  --hero-chip-line: rgba(255, 255, 255, 0.1);
+  --hero-watermark: rgba(255, 255, 255, 0.05);
+
+  --side-bg: radial-gradient(280px 260px at 0% 100%, rgba(214, 58, 58, 0.16), transparent 70%),
+    linear-gradient(180deg, #121014 0%, #170f12 100%);
+  --side-ink: #ecebef;
+  --side-strong: #ffffff;
+  --side-muted: #8f8a97;
+  --side-faint: #5f5a66;
+  --side-hover: rgba(255, 255, 255, 0.05);
+  --side-active: rgba(255, 255, 255, 0.08);
+  --side-line: rgba(255, 255, 255, 0.07);
+  --side-accent: #f07474;
+  --side-card: rgba(255, 255, 255, 0.04);
+  --side-card-hover: rgba(255, 255, 255, 0.07);
+  --side-avatar: linear-gradient(135deg, #3a3340, #2a2430);
+  --side-avatar-ink: #ffffff;
 
   --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
-  --shadow-premium: 0 10px 30px -12px rgba(0, 0, 0, 0.6);
+  --shadow-premium: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 26px -14px rgba(0, 0, 0, 0.7);
+  --shadow-input: none;
   color-scheme: dark;
 }
 
@@ -137,7 +193,7 @@
 
   body {
     margin: 0;
-    font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--app-bg);
     background-attachment: fixed;
     min-height: 100vh;
@@ -149,18 +205,28 @@
   input[type="number"]::-webkit-inner-spin-button {
     opacity: 0.6;
   }
+
+  /* Browser autofill would otherwise paint its own (dark/blue) fill over the theme */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--surface)) inset;
+    -webkit-text-fill-color: rgb(var(--ink));
+    caret-color: rgb(var(--ink));
+    transition: background-color 9999s ease-out;
+  }
 }
 
 @layer components {
-  /* Typography — page titles use the portfolio's display face */
+  /* Typography — page titles use the condensed display face */
   .section-title {
-    @apply m-0 font-display text-[40px] font-normal leading-none tracking-[1.5px] text-ink;
+    @apply m-0 font-display text-[38px] font-bold uppercase leading-none tracking-[0.5px] text-ink;
   }
   .text-gradient {
     @apply bg-grad-text bg-clip-text text-transparent;
   }
 
-  /* Cards: faint red tint from the top corner */
+  /* Cards */
   .standard-card,
   .table-container-card {
     @apply relative overflow-hidden rounded-2xl border border-line bg-surface shadow-premium;
@@ -170,7 +236,7 @@
     @apply p-6;
   }
   .card-hover {
-    @apply transition-all duration-[250ms] ease-out hover:-translate-y-1 hover:border-accent hover:shadow-glow;
+    @apply transition-all duration-[250ms] ease-out hover:-translate-y-0.5 hover:border-line-accent hover:shadow-glow;
   }
 
   /* Icons drawn with stroke SVGs, as in the original */
@@ -178,47 +244,135 @@
     @apply h-[18px] w-[18px] fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:2];
   }
 
-  /* Forms */
+  /* Forms: sentence-style labels, white inputs, red focus ring */
   .form-grid-modern {
-    @apply grid grid-cols-1 gap-5 md:grid-cols-2;
+    @apply grid grid-cols-1 gap-x-4 gap-y-5 md:grid-cols-2;
   }
   .form-label {
-    @apply text-xs font-bold uppercase tracking-[0.04em] text-secondary-grey;
+    @apply text-[13px] font-semibold text-secondary-grey;
   }
   .form-control {
-    @apply w-full rounded-[10px] border border-line bg-subtle px-4 py-3 text-sm font-medium text-ink transition-all duration-200
-      placeholder:text-muted hover:border-line-strong focus:border-accent focus:bg-surface focus:outline-none
-      disabled:cursor-not-allowed disabled:opacity-60;
+    @apply min-h-[42px] w-full rounded-[10px] border border-line-strong bg-surface px-3 py-2.5 text-sm font-medium text-ink transition-[border-color,box-shadow] duration-150
+      placeholder:font-normal placeholder:text-muted/75 hover:border-muted/60 focus:border-accent focus:outline-none
+      disabled:cursor-not-allowed disabled:bg-subtle disabled:opacity-70;
+    box-shadow: var(--shadow-input);
   }
   .form-control:focus {
     box-shadow: 0 0 0 4px var(--ring);
   }
   .form-control.invalid {
-    @apply border-accent bg-accent-light/40;
+    @apply border-accent;
+    box-shadow: 0 0 0 4px var(--ring);
   }
   .form-actions-modern {
-    @apply mt-8 flex flex-col justify-end gap-3 border-t border-line pt-6 md:flex-row;
+    @apply mt-8 flex flex-col justify-end gap-3 border-t border-line pt-5 md:flex-row;
   }
 
-  /* Sidebar navigation: gradient sweep on hover, soft red wash + bar when active */
+  /* ---------------- Sidebar ---------------- */
+  .app-sidebar {
+    background: var(--side-bg);
+    color: var(--side-ink);
+    border-right: 1px solid var(--side-line);
+  }
+  .side-group {
+    @apply mx-2.5 mb-1.5 mt-4 text-[10.5px] font-bold uppercase tracking-[0.1em];
+    color: var(--side-faint);
+  }
+  .side-card {
+    @apply flex items-center gap-2.5 rounded-[10px] border p-2.5 text-left;
+    background: var(--side-card);
+    border-color: var(--side-line);
+  }
+  button.side-card:hover {
+    background: var(--side-card-hover);
+  }
+  .side-chip {
+    @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg;
+    background: var(--side-active);
+    color: var(--side-accent);
+  }
+  .side-strong {
+    color: var(--side-strong);
+  }
+  .side-muted {
+    color: var(--side-muted);
+  }
+  .side-avatar {
+    @apply flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-xs font-extrabold;
+    background: var(--side-avatar);
+    color: var(--side-avatar-ink);
+    border: 1px solid var(--side-line);
+  }
+  .side-icon-btn {
+    @apply flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent;
+    color: var(--side-muted);
+  }
+  .side-icon-btn:hover {
+    background: var(--side-active);
+    color: var(--side-accent);
+  }
+
+  /* Nav rows: 38px, soft red wash + gradient bar when active */
   .nav-item {
-    @apply flex cursor-pointer items-center gap-3 rounded-[11px] px-4 py-3 text-sm font-semibold text-secondary-grey no-underline;
-    background-image: linear-gradient(90deg, rgb(var(--accent) / 0.1), transparent);
-    background-size: 0% 100%;
-    background-repeat: no-repeat;
-    transition: background-size 0.3s ease, color 0.2s ease;
+    @apply relative flex h-[38px] cursor-pointer items-center gap-[11px] rounded-[9px] px-2.5 text-[13.5px] font-semibold no-underline transition-colors duration-150;
+    color: var(--side-muted);
   }
   .nav-item:hover {
-    @apply text-ink;
-    background-size: 100% 100%;
+    background: var(--side-hover);
+    color: var(--side-ink);
   }
   .nav-item.active {
-    @apply rounded-l-none text-accent;
-    background-size: 100% 100%;
-    box-shadow: inset 3px 0 0 rgb(var(--accent));
+    @apply font-bold;
+    background: var(--side-active);
+    color: var(--side-strong);
+  }
+  .nav-item.active::before,
+  .nav-sub-item.active::before {
+    content: "";
+    @apply absolute w-[3px] rounded-r-[3px] bg-grad;
+  }
+  .nav-item.active::before {
+    @apply -left-3 bottom-[9px] top-[9px];
   }
   .nav-item.active svg {
-    @apply text-accent;
+    color: var(--side-accent);
+  }
+  .nav-sub {
+    @apply ml-[19px] flex flex-col gap-px border-l pl-3.5;
+    border-color: var(--side-line);
+  }
+  .nav-sub-item {
+    @apply relative flex h-8 items-center rounded-lg px-2.5 text-[13px] font-medium no-underline transition-colors duration-150;
+    color: var(--side-muted);
+  }
+  .nav-sub-item:hover {
+    background: var(--side-hover);
+    color: var(--side-ink);
+  }
+  .nav-sub-item.active {
+    @apply font-bold;
+    color: var(--side-accent);
+  }
+  .nav-sub-item.active::before {
+    @apply -left-[15px] bottom-2 top-2;
+  }
+
+  /* Dashboard hero */
+  .hero-card {
+    background: var(--hero-bg);
+    border: 1px solid var(--hero-line);
+    color: var(--hero-ink);
+  }
+  .hero-muted {
+    color: var(--hero-muted);
+  }
+  .hero-chip {
+    background: var(--hero-chip-bg);
+    border: 1px solid var(--hero-chip-line);
+    color: var(--hero-ink);
+  }
+  .hero-watermark {
+    color: var(--hero-watermark);
   }
 
   /* Small status pill buttons inside table rows (Renew / Follow-up / Convert / Terminate) */
@@ -226,7 +380,7 @@
     @apply inline-flex h-9 items-center whitespace-nowrap rounded-lg border px-3 text-xs font-bold transition-all duration-200 hover:-translate-y-px;
   }
   .btn-red {
-    @apply border-accent/30 bg-accent-light text-accent hover:border-transparent hover:bg-grad hover:text-white hover:shadow-glow;
+    @apply border-line-accent bg-accent-light text-accent hover:border-transparent hover:bg-grad hover:text-white hover:shadow-glow;
   }
   .btn-yellow {
     @apply border-warning-line bg-warning-soft text-warning hover:bg-warning hover:text-white;
@@ -272,22 +426,22 @@
     display: none !important;
   }
   :root.dark {
-    --main: 244 245 248;
+    --main: 245 244 246;
     --surface: 255 255 255;
-    --subtle: 248 250 252;
-    --hover: 241 245 249;
-    --ink: 15 23 42;
-    --muted: 100 116 139;
-    --secondary-grey: 71 85 105;
-    --primary-grey: 30 41 59;
-    --line: 226 232 240;
-    --line-light: 241 245 249;
+    --subtle: 250 249 251;
+    --hover: 244 242 245;
+    --ink: 23 22 26;
+    --muted: 110 106 118;
+    --secondary-grey: 61 58 67;
+    --primary-grey: 39 36 43;
+    --line: 231 228 234;
+    --line-light: 242 239 243;
     --accent: 201 52 52;
-    --accent-light: 253 238 238;
+    --accent-light: 253 239 239;
   }
   body {
     background: white !important;
-    color: #0f172a !important;
+    color: #17161a !important;
   }
   .app-main {
     padding: 0 !important;

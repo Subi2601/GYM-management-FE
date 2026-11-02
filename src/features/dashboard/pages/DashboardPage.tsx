@@ -22,13 +22,13 @@ export function DashboardPage() {
   return (
     <div className="animate-fadeIn">
       {/* Welcome hero */}
-      <div className="relative flex items-center justify-between overflow-hidden rounded-3xl bg-[radial-gradient(120%_140%_at_85%_0%,#3a1414_0%,#1a1012_45%,#111113_75%)] px-12 py-14 text-white shadow-[0_18px_36px_-20px_rgba(0,0,0,0.45)] max-md:flex-col max-md:items-start max-md:px-6 max-md:py-10">
+      <div className="hero-card relative flex items-center justify-between overflow-hidden rounded-3xl px-12 py-12 shadow-premium max-md:flex-col max-md:items-start max-md:px-6 max-md:py-9">
         <div className="relative z-[2]">
-          <h1 className="m-0 mb-3 font-display text-[54px] font-normal leading-none tracking-[1.5px] text-white max-md:text-[40px]">
-            Welcome to STAG{" "}
-            <span className="text-gradient">FITNESS</span>
+          <h1 className="m-0 mb-3 font-display text-[50px] font-bold uppercase leading-none tracking-[0.5px] max-md:text-[38px]">
+            Welcome to Stag{" "}
+            <span className="text-gradient">Fitness</span>
           </h1>
-          <p className="m-0 mb-7 max-w-[500px] text-[17px] font-medium text-white/70">
+          <p className="hero-muted m-0 mb-7 max-w-[500px] text-base font-medium">
             Hello, {me?.user.name || "Admin"}. Here&apos;s what&apos;s happening at your gym today.
           </p>
           <div className="flex flex-wrap gap-3">
@@ -36,7 +36,7 @@ export function DashboardPage() {
             <HeroBadge>{branchName ?? "All Branches Active"}</HeroBadge>
           </div>
         </div>
-        <div className="pointer-events-none absolute right-10 select-none font-display text-[150px] leading-[.8] tracking-[4px] text-white/[0.05] max-md:hidden" aria-hidden="true">
+        <div className="hero-watermark pointer-events-none absolute right-10 select-none font-display text-[150px] font-bold leading-[.8] tracking-[2px] max-md:hidden" aria-hidden="true">
           STAG
         </div>
       </div>
@@ -58,7 +58,7 @@ export function DashboardPage() {
       )}
 
       {/* KPI cards */}
-      <div className="mt-5 grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-6 max-md:grid-cols-1">
+      <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon="users" label="Total Members" value={s?.total_members} trend="Lifetime Records" />
         <StatCard icon="trending" label="Active Members" value={s?.active_members} trend="Current Subscriptions"
           positive highlight="red" />
@@ -100,7 +100,7 @@ export function DashboardPage() {
 
 function HeroBadge({ pulse = false, children }: { pulse?: boolean; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-5 py-2 text-[13px] font-bold text-white backdrop-blur-[4px]">
+    <div className="hero-chip flex items-center gap-2 rounded-full px-4 py-1.5 text-[13px] font-bold">
       <span className="relative flex h-2 w-2">
         {pulse && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />}
         <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
@@ -123,7 +123,7 @@ interface StatCardProps {
 function StatCard({ icon, label, value, trend, positive = false, highlight }: StatCardProps) {
   return (
     <div className={cn(
-      "group relative overflow-hidden rounded-[20px] border border-line bg-surface p-7",
+      "group relative overflow-hidden rounded-2xl border border-line bg-surface p-6 shadow-premium",
       "bg-[linear-gradient(160deg,var(--card-tint),transparent_55%)] card-hover",
       highlight === "red" && "border-b-[3px] border-b-accent",
       highlight === "grey" && "border-b-[3px] border-b-secondary-grey",
@@ -131,8 +131,8 @@ function StatCard({ icon, label, value, trend, positive = false, highlight }: St
       <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-accent-light text-accent transition-all duration-[250ms] group-hover:bg-grad group-hover:text-white">
         <Icon name={icon} className="h-5 w-5" />
       </div>
-      <div className="mb-1 text-[11px] font-extrabold uppercase tracking-[0.1em] text-muted">{label}</div>
-      <div className="mb-1 font-display text-[48px] font-normal leading-none tracking-[1px] text-ink max-md:text-[38px]">
+      <div className="mb-1.5 text-[13px] font-semibold text-muted">{label}</div>
+      <div className="mb-1 font-display text-[44px] font-bold leading-none tracking-[0.3px] text-ink tabular-nums max-md:text-[36px]">
         {value ?? <span className="inline-block h-10 w-24 animate-pulse rounded-lg bg-hover align-middle" />}
       </div>
       <div className={cn("flex items-center gap-1.5 text-[13px] font-bold", positive ? "text-success" : "text-secondary-grey")}>

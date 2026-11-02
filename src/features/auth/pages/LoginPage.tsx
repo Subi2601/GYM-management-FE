@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { authApi } from "@/features/auth/api";
 import { toApiError } from "@/lib/api-error";
 import { reconcileBranch } from "@/providers/AuthProvider";
@@ -18,15 +19,14 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
-const inputCls =
-  "rounded-[14px] border-[1.5px] border-line bg-subtle px-5 py-4 text-[15px] font-medium text-ink transition-all duration-[250ms] " +
-  "placeholder:text-muted focus:-translate-y-px focus:border-accent focus:bg-surface focus:shadow-[0_0_0_4px_rgba(225,29,72,0.1)] focus:outline-none";
-const labelCls = "pl-1 text-[11px] font-bold uppercase tracking-[0.1em] text-secondary-grey";
+const inputCls = "form-control min-h-[46px] text-[15px]";
+const labelCls = "form-label";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const status = useAuthStore((s) => s.status);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const { register, handleSubmit, formState } = useForm<FormValues>({ resolver: zodResolver(schema), mode: "onChange" });
 
   if (status === "authed") return <Navigate to="/" replace />;
@@ -50,22 +50,24 @@ export function LoginPage() {
   });
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-subtle bg-[radial-gradient(at_0%_0%,rgba(225,29,72,0.05)_0px,transparent_50%),radial-gradient(at_100%_0%,rgba(30,41,59,0.05)_0px,transparent_50%),radial-gradient(at_100%_100%,rgba(225,29,72,0.05)_0px,transparent_50%),radial-gradient(at_0%_100%,rgba(30,41,59,0.05)_0px,transparent_50%)] p-5 max-[480px]:bg-surface max-[480px]:p-0">
-      <div className="absolute -left-[100px] -top-[100px] z-0 h-[400px] w-[400px] rounded-full bg-accent opacity-40 blur-[80px] max-[480px]:hidden" />
-      <div className="absolute -bottom-[100px] -right-[100px] z-0 h-[400px] w-[400px] rounded-full bg-primary-grey opacity-40 blur-[80px] max-[480px]:hidden" />
+    // overflow-clip (not hidden): the glow blobs must not make this a scroll box that focus can shift.
+    <div className="relative flex min-h-screen items-center justify-center overflow-clip p-5 max-[480px]:bg-surface max-[480px]:p-0">
+      <div className="absolute -left-[120px] -top-[120px] z-0 h-[420px] w-[420px] rounded-full bg-accent opacity-[0.14] blur-[90px] max-[480px]:hidden" />
+      <div className="absolute -bottom-[120px] -right-[120px] z-0 h-[420px] w-[420px] rounded-full bg-line-accent opacity-50 blur-[90px] max-[480px]:hidden" />
+      <ThemeToggle className="absolute right-5 top-5 z-[2]" />
 
-      <div className="relative z-[1] w-full max-w-[440px] animate-slideUp rounded-3xl border border-line/80 bg-surface/90 px-12 py-14 shadow-[0_20px_25px_-5px_rgba(0,0,0,0.15),0_10px_10px_-5px_rgba(0,0,0,0.06)] backdrop-blur-[12px] max-[480px]:flex max-[480px]:min-h-screen max-[480px]:max-w-none max-[480px]:flex-col max-[480px]:justify-center max-[480px]:rounded-none max-[480px]:border-none max-[480px]:px-6 max-[480px]:py-10">
+      <div className="relative z-[1] w-full max-w-[440px] animate-slideUp rounded-3xl border border-line bg-surface/90 px-12 py-14 shadow-modal backdrop-blur-[12px] max-[480px]:flex max-[480px]:min-h-screen max-[480px]:max-w-none max-[480px]:flex-col max-[480px]:justify-center max-[480px]:rounded-none max-[480px]:border-none max-[480px]:px-6 max-[480px]:py-10">
         <div className="mb-10 text-center">
-          <div className="mb-3 flex items-center justify-center gap-3 text-[28px] font-extrabold tracking-[-1px] text-ink">
-            <div className="h-8 w-2.5 rounded-md bg-gradient-to-br from-accent to-[#be123c] shadow-[0_4px_12px_rgba(225,29,72,0.3)]" />
-            STAG <strong className="bg-gradient-to-br from-accent to-[#be123c] bg-clip-text text-transparent">FITNESS</strong>
+          <div className="mb-3 flex items-center justify-center gap-3 font-display text-[34px] font-bold uppercase leading-none tracking-[0.5px] text-ink">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-grad text-[22px] text-white shadow-glow">S</div>
+            Stag <span className="text-gradient">Fitness</span>
           </div>
           <p className="m-0 text-[15px] font-medium tracking-[-0.01em] text-muted">Management Portal Access</p>
         </div>
 
         <form onSubmit={onSubmit} className="flex flex-col gap-7" noValidate>
           {error && (
-            <div role="alert" className="flex items-center gap-2.5 rounded-xl border border-[rgba(251,113,133,0.3)] bg-accent-light px-[18px] py-3.5 text-sm font-semibold text-accent">
+            <div role="alert" className="flex items-center gap-2.5 rounded-xl border border-line-accent bg-accent-light px-[18px] py-3.5 text-sm font-semibold text-accent">
               <Icon name="alert" strokeWidth={2.5} />
               {error}
             </div>
@@ -76,16 +78,25 @@ export function LoginPage() {
           </div>
           <div className="flex flex-col gap-2.5">
             <label htmlFor="password" className={labelCls}>Password</label>
-            <input id="password" type="password" autoComplete="current-password" placeholder="••••••••" className={inputCls} {...register("password")} />
+            <div className="relative">
+              <input id="password" type={showPassword ? "text" : "password"} autoComplete="current-password"
+                placeholder="••••••••" className={`${inputCls} pr-12`} {...register("password")} />
+              <button type="button" onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword}
+                title={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-muted transition-colors hover:bg-hover hover:text-ink">
+                <Icon name={showPassword ? "eyeOff" : "eye"} className="h-[18px] w-[18px]" />
+              </button>
+            </div>
           </div>
           <div className="mt-2">
             <Button type="submit" className="w-full" disabled={!formState.isValid} loading={formState.isSubmitting}>
-              Authenticate
+              Sign in
             </Button>
           </div>
         </form>
 
-        <div className="mt-12 border-t border-[rgba(241,245,249,0.8)] pt-8 text-center text-[13px] font-medium text-muted">
+        <div className="mt-12 border-t border-line-light pt-8 text-center text-[13px] font-medium text-muted">
           <p className="my-1.5 opacity-80">&copy; {new Date().getFullYear()} STAG FITNESS Systems</p>
           <p className="my-1.5 opacity-80">Secure Enterprise Session</p>
         </div>

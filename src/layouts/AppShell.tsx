@@ -25,7 +25,7 @@ export function AppShell() {
       <div className="[grid-area:sidebar] max-md:hidden" />
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onManageBranches={() => setBranchesOpen(true)} />
       <Header onToggleSidebar={() => setSidebarOpen((o) => !o)} />
-      <main className="app-main min-w-0 overflow-y-auto p-10 [grid-area:main] max-md:p-5">
+      <main className="app-main min-w-0 overflow-y-auto px-10 py-8 [grid-area:main] max-md:p-5">
         <Outlet />
       </main>
       <ManageBranchesModal open={branchesOpen} onClose={() => setBranchesOpen(false)} />
