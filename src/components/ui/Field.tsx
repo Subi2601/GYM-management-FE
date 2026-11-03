@@ -14,6 +14,9 @@ interface FieldProps {
   hint?: ReactNode;
 }
 
+/** Extra classes for a read-only computed input (registration id, balance): dashed, greyed. */
+export const READONLY_INPUT = "!border-dashed !bg-subtle !text-muted cursor-not-allowed";
+
 /** Label + control + inline error — the original ".form-group-modern". */
 export function Field({ label, htmlFor, error, required, className, children, hint }: FieldProps) {
   return (

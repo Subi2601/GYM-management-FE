@@ -15,6 +15,12 @@ export function humanize(value: string | null | undefined): string {
     .join(" ");
 }
 
+/** "Subha Lakshmi" → "SL", "Owner" → "OW" (avatar initials). */
+export function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? parts[0]?.[1] ?? "")).toUpperCase() || "?";
+}
+
 /** Indian mobile number with country code, as the old WhatsApp share used it. */
 export function whatsappPhone(phone: string | null | undefined): string {
   if (!phone) return "";

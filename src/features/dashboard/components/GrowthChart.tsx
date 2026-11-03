@@ -8,6 +8,8 @@ const H = 200;
 /** Horizontal inset so the first/last bars and points are not clipped by the frame. */
 const PAD_X = 50;
 const BAR_W = 56;
+/** Theme accent as inline CSS (var() is not resolved in SVG presentation attributes). */
+const ACCENT = "rgb(var(--accent))";
 
 interface ChartPoint {
   x: number;
@@ -72,9 +74,9 @@ export function GrowthChart({ data }: { data: GrowthPoint[] }) {
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
           <defs>
             <linearGradient id={`area-${uid}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#d63a3a" stopOpacity="0.3" />
-              <stop offset="50%" stopColor="#d63a3a" stopOpacity="0.1" />
-              <stop offset="100%" stopColor="#d63a3a" stopOpacity="0" />
+              <stop offset="0%" style={{ stopColor: ACCENT, stopOpacity: 0.3 }} />
+              <stop offset="50%" style={{ stopColor: ACCENT, stopOpacity: 0.1 }} />
+              <stop offset="100%" style={{ stopColor: ACCENT, stopOpacity: 0 }} />
             </linearGradient>
             <filter id={`glow-${uid}`}>
               <feGaussianBlur stdDeviation="4" result="blur" />
@@ -95,7 +97,7 @@ export function GrowthChart({ data }: { data: GrowthPoint[] }) {
           ))}
 
           <path d={area} fill={`url(#area-${uid})`} className="pointer-events-none" />
-          <path d={curve} fill="none" stroke="#d63a3a" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"
+          <path d={curve} fill="none" style={{ stroke: ACCENT }} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"
             vectorEffect="non-scaling-stroke" filter={`url(#glow-${uid})`} className="pointer-events-none" />
         </svg>
 

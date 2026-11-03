@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 
 import { apiGet, apiPost, cleanParams } from "@/lib/api-client";
-import type { Paginated } from "@/types/api";
+import type { Paginated, TabCounts } from "@/types/api";
 import type { CompletePaymentRequest, CompletePaymentResponse, EnrollRequest,
   EnrollResponse } from "@/types/payment-enroll";
 import type { SubscriptionDetail, SubscriptionListQuery, SubscriptionRow } from "@/types/subscription";
@@ -10,10 +10,16 @@ export const subscriptionKeys = {
   all: ["subscriptions"] as const,
   list: (branch: string | null | undefined, q: SubscriptionListQuery) => ["subscriptions", "list", branch, q] as const,
   detail: (branch: string | null | undefined, id: string) => ["subscriptions", "detail", branch, id] as const,
+  counts: (branch: string | null | undefined) => ["subscriptions", "counts", branch] as const,
 };
+
+/** Tabs of the renewal board; `active` = not due for renewal (renewal_state NONE). */
+export type SubscriptionTab = "all" | "expiring" | "expired" | "active";
 
 export const subscriptionApi = {
   list: (q: SubscriptionListQuery) => apiGet<Paginated<SubscriptionRow>>("/subscriptions", cleanParams(q)),
+  /** Row count per tab in one call. */
+  counts: () => apiGet<TabCounts<SubscriptionTab>>("/subscriptions/counts"),
   detail: (id: string) => apiGet<SubscriptionDetail>(`/subscriptions/${id}`),
   /** Atomic multi-plan enrolment / renewal / add-on: subscriptions + payment in one transaction. */
   enroll: (body: EnrollRequest) => apiPost<EnrollResponse>("/subscriptions/enroll", body),

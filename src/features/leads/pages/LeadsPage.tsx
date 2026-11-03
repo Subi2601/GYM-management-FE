@@ -1,30 +1,43 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { confirm } from "@/components/ui/ConfirmDialog";
 import { ActionGroup, ActionIcon, DataTable, ROW_MARKER } from "@/components/ui/DataTable";
 import { Icon } from "@/components/ui/Icon";
+import { DateRangeFilter, FilterSelect, FilterTabs, ListToolbar, type ActiveFilter } from "@/components/ui/ListToolbar";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { goalLabel } from "@/features/lookups/fitness-goals";
+import { leadApi, useInvalidateLeads, useLeadCounts, useLeads } from "@/features/leads/api";
 import { FollowUpModal } from "@/features/leads/components/FollowUpModal";
-import { LeadFormModal } from "@/features/leads/components/LeadFormModal";
-import { LeadHistoryModal } from "@/features/leads/components/LeadHistoryModal";
-import { leadApi, leadKeys, useLeads } from "@/features/leads/api";
-import { useListState } from "@/hooks/use-list-state";
-import { formatDate } from "@/lib/format";
+import { LeadFormDrawer } from "@/features/leads/components/LeadFormDrawer";
+import { LeadHistoryDrawer } from "@/features/leads/components/LeadHistoryDrawer";
+import { useInvalidateMembers } from "@/features/members/api";
+import { paginationProps, useAddAction, useListState, useUrlEnum } from "@/hooks/use-list-state";
+import { formatDate, todayISO } from "@/lib/format";
 import { notify } from "@/lib/notify";
+import { cn, humanize } from "@/lib/utils";
 import { useCan } from "@/stores/auth-store";
 import { useBranchStore } from "@/stores/branch-store";
-import { LEAD_FILTERS, type Lead, type LeadFilter } from "@/types/lead";
+import { LEAD_STATUSES, type LeadStatus } from "@/types/enums";
+import { LEAD_FILTERS, type Lead, type LeadFilter, type LeadListQuery, type LeadSortKey } from "@/types/lead";
 
-const FILTER_LABEL: Record<LeadFilter, string> = {
-  all: "All Leads",
+const TAB_LABEL: Record<LeadFilter, string> = {
+  all: "All leads",
   followup: "Follow-ups",
-  rejected: "Rejected Leads",
+  rejected: "Rejected",
 };
+
+const sortKey = (key: LeadSortKey) => key;
+
+/** Small coloured row buttons with the `<Button loading>` spinner / disabled state. */
+const ROW_BUTTON = "h-8 px-3 py-0 text-xs font-bold hover:enabled:shadow-none";
+const ROW_TONE = {
+  yellow: "border-warning-line bg-warning-soft text-warning hover:enabled:border-warning hover:enabled:bg-warning hover:enabled:text-white",
+  green: "border-success-line bg-success-soft text-success hover:enabled:border-success hover:enabled:bg-success hover:enabled:text-white",
+} as const;
 
 function rowMarker(lead: Lead): string | undefined {
   switch (lead.status) {
@@ -37,16 +50,22 @@ function rowMarker(lead: Lead): string | undefined {
   }
 }
 
-function isLeadFilter(v: string | null): v is LeadFilter {
-  return v !== null && (LEAD_FILTERS as readonly string[]).includes(v);
+/** Overdue / due-today follow-ups stand out while the lead is still open. */
+function followUpTone(lead: Lead, today: string): string {
+  const date = lead.next_follow_up_date;
+  const open = lead.status === "NEW" || lead.status === "FOLLOW_UP";
+  if (!date || !open) return "text-ink";
+  if (date < today) return "font-semibold text-danger";
+  if (date === today) return "font-semibold text-warning";
+  return "text-ink";
 }
 
-/** Leads Management: list by filter (?filter=), add/edit, follow-up, convert to member, delete. */
+/** Leads — tabs (All / Follow-ups / Rejected), search + status / follow-up filters, add/edit, follow-up, convert, delete. */
 export function LeadsPage() {
-  const qc = useQueryClient();
-  const [params, setParams] = useSearchParams();
-  const rawFilter = params.get("filter");
-  const filter: LeadFilter = isLeadFilter(rawFilter) ? rawFilter : "all";
+  const [tab, setTab] = useUrlEnum("tab", LEAD_FILTERS, "all");
+  const list = useListState();
+  const [status, setStatus] = useState<LeadStatus | "">("");
+  const [followUp, setFollowUp] = useState({ from: "", to: "" });
 
   // "All Branches" is a read-only aggregate — writes need a concrete branch.
   const branchSelected = useBranchStore((s) => Boolean(s.selectedBranchId));
@@ -55,40 +74,38 @@ export function LeadsPage() {
   const canDelete = useCan("lead:delete") && branchSelected;
   const canConvert = useCan("lead:convert") && branchSelected;
 
-  const list = useListState();
-  const { setPage } = list;
-  const leads = useLeads({ page: list.page, page_size: list.pageSize, search: list.debouncedSearch || undefined, filter });
-
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [followUpFor, setFollowUpFor] = useState<Lead | null>(null);
   const [historyFor, setHistoryFor] = useState<Lead | null>(null);
 
-  // A new filter starts again from page 1.
-  useEffect(() => setPage(1), [filter, setPage]);
+  const { setPage } = list;
+  // Tab / filter changes restart from page 1.
+  useEffect(() => setPage(1), [tab, status, followUp, setPage]);
 
-  // Sidebar "Add Lead" → ?action=add opens the modal, then the param is cleared.
-  useEffect(() => {
-    if (params.get("action") !== "add") return;
-    if (canCreate) {
-      setEditing(null);
-      setFormOpen(true);
-    }
-    const next = new URLSearchParams(params);
-    next.delete("action");
-    setParams(next, { replace: true });
-  }, [params, setParams, canCreate]);
+  const openAdd = useCallback(() => {
+    setEditing(null);
+    setFormOpen(true);
+  }, []);
+  // Dashboard quick link /leads?action=add opens the drawer.
+  useAddAction(openAdd, canCreate);
 
-  const afterChange = async () => {
-    await qc.invalidateQueries({ queryKey: leadKeys.all });
-    await qc.invalidateQueries({ queryKey: ["dashboard"] });
+  const query: LeadListQuery = {
+    ...list.query, filter: tab, status,
+    follow_up_from: followUp.from || undefined, follow_up_to: followUp.to || undefined,
   };
+  const leads = useLeads(query);
+
+  const counts = useLeadCounts();
+
+  const invalidate = useInvalidateLeads();
+  const invalidateMembers = useInvalidateMembers();
 
   const remove = useMutation({
     mutationFn: (id: string) => leadApi.remove(id),
     onSuccess: async (res) => {
       notify.success(res.message);
-      await afterChange();
+      await invalidate();
     },
     onError: notify.error,
   });
@@ -97,59 +114,69 @@ export function LeadsPage() {
     mutationFn: (id: string) => leadApi.convert(id),
     onSuccess: async (res) => {
       notify.success(res.message);
-      await Promise.all([
-        afterChange(),
-        qc.invalidateQueries({ queryKey: ["lookup", "members"] }),
-        qc.invalidateQueries({ queryKey: ["members"] }),
-      ]);
+      await Promise.all([invalidate(), invalidateMembers()]);
     },
     onError: notify.error,
   });
 
   const columns = useMemo<ColumnDef<Lead, unknown>[]>(() => {
+    const today = todayISO();
     const onDelete = async (lead: Lead) => {
       if (await confirm(`Are you sure you want to delete lead: ${lead.name}?`)) remove.mutate(lead.id);
     };
     const onConvert = async (lead: Lead) => {
       if (await confirm(`Convert ${lead.name} to a member?`)) convert.mutate(lead.id);
     };
-    const busyId = (m: { isPending: boolean; variables: string | undefined }) => (m.isPending ? m.variables : undefined);
-    const converting = busyId(convert);
+    const converting = convert.isPending ? convert.variables : undefined;
 
     return [
-      { accessorKey: "name", header: "Name", meta: { width: "180px" },
-        cell: ({ row }) => <span className="font-semibold text-ink">{row.original.name}</span> },
-      { accessorKey: "phone", header: "Phone", meta: { width: "130px" } },
-      { accessorKey: "status", header: "Status", meta: { width: "150px" },
+      { accessorKey: "name", header: "Lead", meta: { sortKey: sortKey("name") },
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <div className="truncate font-semibold text-ink">{row.original.name}</div>
+            <div className="text-xs text-muted">{row.original.phone}</div>
+          </div>
+        ) },
+      { accessorKey: "status", header: "Status", meta: { width: "150px", sortKey: sortKey("status") },
         cell: ({ row }) => <StatusBadge value={row.original.status} /> },
-      { accessorKey: "goal", header: "Goal", meta: { width: "150px" },
-        cell: ({ row }) => row.original.goal ?? "—" },
-      { accessorKey: "plan_to_join_date", header: "Plan to Join", meta: { width: "130px" },
-        cell: ({ row }) => formatDate(row.original.plan_to_join_date) },
-      { accessorKey: "next_follow_up_date", header: "Next Follow-up", meta: { width: "140px" },
-        cell: ({ row }) => formatDate(row.original.next_follow_up_date) },
+      { accessorKey: "goal", header: "Goal", meta: { width: "170px" },
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <div className="truncate">{goalLabel(row.original.goal) ?? "—"}</div>
+            {row.original.location && <div className="truncate text-xs text-muted">{row.original.location}</div>}
+          </div>
+        ) },
+      { accessorKey: "plan_to_join_date", header: "Plan to join", meta: { width: "130px", sortKey: sortKey("plan_to_join_date") },
+        cell: ({ row }) => <span className="whitespace-nowrap">{formatDate(row.original.plan_to_join_date)}</span> },
+      { accessorKey: "next_follow_up_date", header: "Next follow-up",
+        meta: { width: "150px", sortKey: sortKey("next_follow_up_date") },
+        cell: ({ row }) => (
+          <span className={cn("whitespace-nowrap", followUpTone(row.original, today))}>
+            {formatDate(row.original.next_follow_up_date)}
+          </span>
+        ) },
       {
-        id: "actions", header: "Actions",
+        id: "actions", header: "", meta: { width: "260px" },
         cell: ({ row }) => {
           const lead = row.original;
           return (
             <ActionGroup>
               {canUpdate && !lead.converted_member_id && (
-                <button type="button" className="btn-status-action btn-yellow" onClick={() => setFollowUpFor(lead)}>
+                <Button variant="secondary" className={cn(ROW_BUTTON, ROW_TONE.yellow)} onClick={() => setFollowUpFor(lead)}>
                   Follow-up
-                </button>
+                </Button>
               )}
               {canConvert && lead.status !== "JOINED" && (
-                <button type="button" className="btn-status-action btn-green disabled:opacity-50"
-                  disabled={converting === lead.id} onClick={() => onConvert(lead)}>
-                  {converting === lead.id ? "Converting…" : "Convert"}
-                </button>
+                <Button variant="secondary" className={cn(ROW_BUTTON, ROW_TONE.green)}
+                  loading={converting === lead.id} onClick={() => void onConvert(lead)}>
+                  Convert
+                </Button>
               )}
-              <ActionIcon kind="view" title="Notes & History" onClick={() => setHistoryFor(lead)} />
+              <ActionIcon kind="view" title="Notes & history" onClick={() => setHistoryFor(lead)} />
               {canUpdate && (
                 <ActionIcon kind="edit" onClick={() => { setEditing(lead); setFormOpen(true); }} />
               )}
-              {canDelete && <ActionIcon kind="delete" onClick={() => onDelete(lead)} />}
+              {canDelete && <ActionIcon kind="delete" onClick={() => void onDelete(lead)} />}
             </ActionGroup>
           );
         },
@@ -157,46 +184,79 @@ export function LeadsPage() {
     ];
   }, [canUpdate, canConvert, canDelete, remove, convert]);
 
+  const active: ActiveFilter[] = [];
+  if (status) active.push({ label: `Status: ${humanize(status)}`, onRemove: () => setStatus("") });
+  if (followUp.from || followUp.to) {
+    active.push({
+      label: `Follow-up: ${followUp.from ? formatDate(followUp.from) : "…"} – ${followUp.to ? formatDate(followUp.to) : "…"}`,
+      onRemove: () => setFollowUp({ from: "", to: "" }),
+    });
+  }
+
   const data = leads.data;
+  const filtered = !!list.debouncedSearch || active.length > 0;
 
   return (
     <div>
       <PageHeader
-        title="Leads Management"
-        subtitle={FILTER_LABEL[filter]}
-        search={{ value: list.search, onChange: list.setSearch, placeholder: "Search leads..." }}
-        actions={
-          <>
-            <Button variant="secondary" icon={<Icon name="refresh" />} loading={leads.isFetching && !leads.isLoading}
-              onClick={() => leads.refetch()}>
-              Refresh
-            </Button>
-            {canCreate && (
-              <Button icon={<Icon name="plus" />} onClick={() => { setEditing(null); setFormOpen(true); }}>
-                Add Lead
-              </Button>
-            )}
-          </>
-        }
+        title="Leads"
+        subtitle="Enquiries, follow-ups and conversions to members"
+        actions={canCreate && (
+          <Button icon={<Icon name="plus" className="h-4 w-4" />} onClick={openAdd}>
+            Add lead
+          </Button>
+        )}
       />
 
       <DataTable
         columns={columns}
         data={data?.items ?? []}
         loading={leads.isLoading}
-        emptyMessage={leads.isError ? leads.error.message : "No leads found."}
-        rowClassName={rowMarker}
+        fetching={leads.isFetching}
         getRowId={(l) => l.id}
-        maxHeightClass="max-h-[calc(100vh-260px)]"
-        pagination={data ? {
-          page: list.page, pageSize: list.pageSize, total: data.total,
-          onPageChange: list.setPage, onPageSizeChange: list.setPageSize,
-        } : undefined}
+        onRowClick={setHistoryFor}
+        rowClassName={rowMarker}
+        emptyIcon="clipboard"
+        emptyMessage={leads.isError ? leads.error.message
+          : filtered ? "No leads match these filters"
+            : tab === "followup" ? "No follow-ups pending"
+              : tab === "rejected" ? "No rejected leads" : "No leads yet"}
+        emptyHint={leads.isError ? undefined
+          : filtered ? "Try a different search or clear the filters."
+            : tab === "all" && canCreate ? "Add your first enquiry to start tracking follow-ups." : undefined}
+        sorting={list.sorting}
+        pagination={paginationProps(list, data?.total)}
+        toolbar={
+          <>
+            <FilterTabs value={tab} onChange={setTab}
+              tabs={LEAD_FILTERS.map((f) => ({ value: f, label: TAB_LABEL[f], count: counts.data?.[f] }))} />
+            <ListToolbar
+              search={{ value: list.search, onChange: list.setSearch, placeholder: "Search name or phone" }}
+              filters={
+                <>
+                  <FilterSelect placeholder="Any status" ariaLabel="Status" value={status}
+                    onChange={(v) => setStatus(v as LeadStatus | "")}
+                    options={LEAD_STATUSES.map((s) => ({ value: s, label: humanize(s) }))} />
+                  <DateRangeFilter label="Follow-up" from={followUp.from} to={followUp.to}
+                    onChange={(from, to) => setFollowUp({ from, to })} />
+                </>
+              }
+              actions={
+                <Button variant="secondary" className="h-9 px-3.5 py-0 text-[13px]"
+                  icon={<Icon name="refresh" className="h-4 w-4" />}
+                  loading={leads.isFetching && !leads.isLoading} onClick={() => void leads.refetch()}>
+                  Refresh
+                </Button>
+              }
+              active={active}
+            />
+          </>
+        }
       />
 
-      <LeadFormModal open={formOpen} lead={editing} onClose={() => { setFormOpen(false); setEditing(null); }} />
+      <LeadFormDrawer open={formOpen} lead={editing} onClose={() => { setFormOpen(false); setEditing(null); }} />
       <FollowUpModal lead={followUpFor} onClose={() => setFollowUpFor(null)} />
-      <LeadHistoryModal lead={historyFor} onClose={() => setHistoryFor(null)} />
+      <LeadHistoryDrawer lead={historyFor} onClose={() => setHistoryFor(null)} />
     </div>
   );
 }

@@ -18,14 +18,15 @@ export function AppShell() {
   if (me?.can_switch_branch && selectedBranchId === undefined) return <Navigate to="/branch-selection" replace />;
 
   return (
-    <div className="grid min-h-screen grid-cols-[var(--sidebar-width)_1fr] grid-rows-[var(--header-height)_1fr] overflow-x-hidden [grid-template-areas:'sidebar_header''sidebar_main'] max-md:grid-cols-1 max-md:[grid-template-areas:'header''main']">
+    <div className="grid min-h-screen grid-cols-[var(--sidebar-width)_1fr] grid-rows-[var(--header-height)_1fr] [grid-template-areas:'sidebar_header''sidebar_main'] max-md:grid-cols-1 max-md:[grid-template-areas:'header''main']">
       {sidebarOpen && (
         <div className="fixed inset-0 z-[999] hidden bg-black/40 backdrop-blur-[4px] max-md:block" onClick={() => setSidebarOpen(false)} />
       )}
       <div className="[grid-area:sidebar] max-md:hidden" />
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onManageBranches={() => setBranchesOpen(true)} />
       <Header onToggleSidebar={() => setSidebarOpen((o) => !o)} />
-      <main className="app-main min-w-0 overflow-y-auto px-10 py-8 [grid-area:main] max-md:p-5">
+      {/* No overflow here: the page (body) scrolls, so sticky bars inside screens stick to the viewport. */}
+      <main className="app-main min-w-0 px-10 py-8 [grid-area:main] max-md:p-5">
         <Outlet />
       </main>
       <ManageBranchesModal open={branchesOpen} onClose={() => setBranchesOpen(false)} />

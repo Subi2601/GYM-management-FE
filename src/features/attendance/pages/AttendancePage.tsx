@@ -1,43 +1,42 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useEffect, useState, type ReactNode } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { ActionGroup, DataTable } from "@/components/ui/DataTable";
-import { Field, Select, Textarea } from "@/components/ui/Field";
+import { ActionGroup, ActionIcon, DataTable, ROW_MARKER } from "@/components/ui/DataTable";
 import { Icon } from "@/components/ui/Icon";
-import { Modal } from "@/components/ui/Modal";
+import { FilterTabs, ListToolbar } from "@/components/ui/ListToolbar";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { attendanceApi, attendanceKeys } from "@/features/attendance/api";
-import { formatDate, formatTime, MONTHS, todayISO } from "@/lib/format";
+import { AttendanceHistoryDrawer, type HistoryTarget } from "@/features/attendance/components/AttendanceHistoryDrawer";
+import { AttendanceMarkModal } from "@/features/attendance/components/AttendanceMarkModal";
+import { type SortDir, useDebouncedValue, useUrlEnum } from "@/hooks/use-list-state";
+import { formatDate, formatTime, todayISO } from "@/lib/format";
 import { notify } from "@/lib/notify";
-import { cn, humanize } from "@/lib/utils";
+import { humanize } from "@/lib/utils";
 import { useCan } from "@/stores/auth-store";
 import { useBranchStore } from "@/stores/branch-store";
 import type { AttendanceRecord, UnmarkedEmployee } from "@/types/attendance";
 import { ATTENDANCE_STATUSES, type AttendanceStatus } from "@/types/enums";
 
+const STATUS_TABS = ["all", ...ATTENDANCE_STATUSES] as const;
+type StatusTab = (typeof STATUS_TABS)[number];
+
 /** Left-edge markers from the original attendance.css. */
 const STATUS_MARKER: Partial<Record<AttendanceStatus, string>> = {
-  PRESENT: "[&>td:first-child]:border-l-4 [&>td:first-child]:border-l-success",
-  LATE: "[&>td:first-child]:border-l-4 [&>td:first-child]:border-l-warning",
-  ABSENT: "[&>td:first-child]:border-l-4 [&>td:first-child]:border-l-accent",
-  HALF_DAY: "[&>td:first-child]:border-l-4 [&>td:first-child]:border-l-info",
+  PRESENT: ROW_MARKER.joined,
+  LATE: ROW_MARKER.nearExpiry,
+  ABSENT: ROW_MARKER.rejected,
+  HALF_DAY: ROW_MARKER.new,
 };
 
-/** Strips DataTable's own card chrome when it sits inside a titled card. */
-const EMBEDDED_TABLE = "[&>div]:rounded-none [&>div]:border-0 [&>div]:shadow-none";
+/** Client-side sort keys (the daily view is not paginated server-side). */
+type SortKey = "employee_name" | "check_in_time" | "check_out_time";
+const isSortKey = (k: string): k is SortKey =>
+  k === "employee_name" || k === "check_in_time" || k === "check_out_time";
 
-interface HistoryTarget {
-  id: string;
-  name: string;
-}
-
-/** Daily Attendance — records for a date, "Pending Mark" list, mark / checkout, monthly history. */
+/** Daily attendance — records for a date (status tabs, search, sort), "Pending mark" list, mark / checkout, history. */
 export function AttendancePage() {
   const qc = useQueryClient();
   const branch = useBranchStore((s) => s.selectedBranchId);
@@ -45,12 +44,18 @@ export function AttendancePage() {
   const writable = branch !== null && canMark;
   const today = todayISO();
   const [date, setDate] = useState(today);
+  const [tab, setTab] = useUrlEnum<StatusTab>("tab", STATUS_TABS, "all");
+  const [search, setSearch] = useState("");
+  const term = useDebouncedValue(search.trim().toLowerCase(), 150);
+  const [sortBy, setSortBy] = useState<SortKey | undefined>(undefined);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [marking, setMarking] = useState<UnmarkedEmployee | null>(null);
   const [history, setHistory] = useState<HistoryTarget | null>(null);
 
   const daily = useQuery({
     queryKey: attendanceKeys.daily(branch, date),
     queryFn: () => attendanceApi.daily(date),
+    placeholderData: keepPreviousData,
   });
 
   const checkout = useMutation({
@@ -62,251 +67,158 @@ export function AttendancePage() {
     onError: notify.error,
   });
 
-  const records = daily.data?.data.records ?? [];
+  const records = useMemo(() => daily.data?.data.records ?? [], [daily.data]);
   const notMarked = daily.data?.data.not_marked ?? [];
   const isToday = date === today;
 
+  const tabCount = (t: StatusTab): number | undefined =>
+    daily.data ? (t === "all" ? records.length : records.filter((r) => r.status === t).length) : undefined;
+
+  const rows = useMemo(() => {
+    const filtered = records.filter((r) =>
+      (tab === "all" || r.status === tab)
+      && (!term || r.employee_name.toLowerCase().includes(term) || r.employee_code.toLowerCase().includes(term)));
+    if (!sortBy) return filtered;
+    const dir = sortDir === "asc" ? 1 : -1;
+    const value = (r: AttendanceRecord) => (sortBy === "employee_name" ? r.employee_name.toLowerCase() : r[sortBy] ?? "");
+    return [...filtered].sort((a, b) => {
+      const va = value(a);
+      const vb = value(b);
+      return (va < vb ? -1 : va > vb ? 1 : 0) * dir;
+    });
+  }, [records, tab, term, sortBy, sortDir]);
+
   const columns: ColumnDef<AttendanceRecord, unknown>[] = [
+    { accessorKey: "employee_name", header: "Employee", meta: { sortKey: "employee_name" },
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate font-semibold text-ink">{row.original.employee_name}</div>
+          <div className="font-mono text-xs text-muted">{row.original.employee_code}</div>
+        </div>
+      ) },
+    { accessorKey: "employee_role", header: "Role", meta: { width: "130px" },
+      cell: ({ row }) => humanize(row.original.employee_role) },
+    { accessorKey: "status", header: "Status", meta: { width: "120px" },
+      cell: ({ row }) => <StatusBadge value={row.original.status} /> },
+    { accessorKey: "check_in_time", header: "In", meta: { width: "90px", sortKey: "check_in_time" },
+      cell: ({ row }) => formatTime(row.original.check_in_time) },
+    { accessorKey: "check_out_time", header: "Out", meta: { width: "90px", sortKey: "check_out_time" },
+      cell: ({ row }) => formatTime(row.original.check_out_time) },
     {
-      header: "Employee", accessorKey: "employee_name",
-      cell: ({ row }) => <span className="font-semibold">{row.original.employee_name}</span>,
-    },
-    { header: "Code", accessorKey: "employee_code", meta: { width: "120px" } },
-    { header: "Role", accessorKey: "employee_role", meta: { width: "130px" }, cell: ({ row }) => humanize(row.original.employee_role) },
-    {
-      header: "Status", accessorKey: "status", meta: { width: "120px" },
-      cell: ({ row }) => <StatusBadge value={row.original.status} />,
-    },
-    { header: "In", accessorKey: "check_in_time", meta: { width: "90px" }, cell: ({ row }) => formatTime(row.original.check_in_time) },
-    { header: "Out", accessorKey: "check_out_time", meta: { width: "90px" }, cell: ({ row }) => formatTime(row.original.check_out_time) },
-    {
-      id: "actions", header: "Actions", meta: { width: "170px" },
+      id: "actions", header: "", meta: { width: "160px" },
       cell: ({ row }) => {
         const r = row.original;
         const canCheckout = writable && isToday && !!r.check_in_time && !r.check_out_time;
         return (
           <ActionGroup>
             {canCheckout && (
-              <button type="button" className="btn-status-action btn-green disabled:opacity-50"
-                disabled={checkout.isPending && checkout.variables === r.employee_id}
+              <Button variant="secondary" className="h-8 px-3 py-0 text-xs"
+                loading={checkout.isPending && checkout.variables === r.employee_id}
+                disabled={checkout.isPending}
                 onClick={() => checkout.mutate(r.employee_id)}>
-                {checkout.isPending && checkout.variables === r.employee_id ? "Checking out…" : "Checkout"}
-              </button>
+                Checkout
+              </Button>
             )}
-            <button type="button" className="action-icon" title="View History"
-              onClick={() => setHistory({ id: r.employee_id, name: r.employee_name })}>
-              <Icon name="clock" className="h-4 w-4" />
-            </button>
+            <ActionIcon kind="view" title="View history"
+              onClick={() => setHistory({ id: r.employee_id, name: r.employee_name, code: r.employee_code })} />
           </ActionGroup>
         );
       },
     },
   ];
 
+  const filtered = !!term || tab !== "all";
+
   return (
     <div>
       <PageHeader
-        title="Daily Attendance"
+        title="Attendance"
+        subtitle={isToday ? "Who's in today, and who still needs marking" : `Attendance for ${formatDate(date)}`}
         actions={
-          <>
-            <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value || today)}
-              className="h-[42px] rounded-lg border border-line bg-surface px-3 text-[13px] font-semibold text-ink outline-none focus:border-secondary-grey" />
-            <Button variant="secondary" icon={<Icon name="refresh" className="h-4 w-4" />}
-              loading={daily.isFetching && !daily.isLoading} onClick={() => void daily.refetch()}>
-              Refresh
-            </Button>
-          </>
+          <Button variant="secondary" icon={<Icon name="refresh" className="h-4 w-4" />}
+            loading={daily.isFetching && !daily.isLoading} onClick={() => void daily.refetch()}>
+            Refresh
+          </Button>
         }
       />
 
-      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_300px]">
-        <div className="table-container-card overflow-hidden">
-          <CardHeader>{isToday ? "Who's In Today" : `Attendance — ${formatDate(date)}`}</CardHeader>
-          <div className={EMBEDDED_TABLE}>
-            <DataTable
-              columns={columns}
-              data={records}
-              loading={daily.isLoading}
-              emptyMessage="No attendance marked for this date."
-              rowClassName={(r) => STATUS_MARKER[r.status]}
-              getRowId={(r) => r.id}
-              maxHeightClass="max-h-[calc(100vh-300px)]"
-            />
-          </div>
-        </div>
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_300px]">
+        <DataTable
+          columns={columns}
+          data={rows}
+          loading={daily.isLoading}
+          fetching={daily.isFetching}
+          getRowId={(r) => r.id}
+          rowClassName={(r) => STATUS_MARKER[r.status]}
+          emptyIcon="calendar"
+          emptyMessage={filtered && records.length > 0 ? "No records match these filters" : "No attendance marked for this date"}
+          emptyHint={filtered && records.length > 0 ? "Try a different search or tab."
+            : writable && notMarked.length > 0 ? "Mark staff from the Pending mark list." : undefined}
+          sorting={{
+            sortBy,
+            sortDir,
+            onSortChange: (by, dir) => {
+              if (!isSortKey(by)) return;
+              setSortBy(by);
+              setSortDir(dir);
+            },
+          }}
+          maxHeightClass="max-h-[calc(100vh-330px)]"
+          toolbar={
+            <>
+              <FilterTabs value={tab} onChange={setTab}
+                tabs={STATUS_TABS.map((t) => ({ value: t, label: t === "all" ? "All" : humanize(t), count: tabCount(t) }))} />
+              <ListToolbar
+                search={{ value: search, onChange: setSearch, placeholder: "Search name or employee ID" }}
+                filters={
+                  <>
+                    <input type="date" value={date} max={today} aria-label="Date"
+                      onChange={(e) => setDate(e.target.value || today)} className="toolbar-control w-[150px]" />
+                    {!isToday && (
+                      <button type="button" className="btn-status-action btn-grey" onClick={() => setDate(today)}>Today</button>
+                    )}
+                  </>
+                }
+              />
+            </>
+          }
+        />
 
-        <div className="flex flex-col gap-5 max-lg:order-first">
-          <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-[0_4px_12px_rgba(0,0,0,0.03)]">
-            <CardHeader>
-              Pending Mark
-              {notMarked.length > 0 && (
-                <span className="ml-2 rounded-full bg-accent-light px-2 py-0.5 text-[11px] text-accent">{notMarked.length}</span>
-              )}
-            </CardHeader>
-            <div className="max-h-[calc(100vh-350px)] overflow-y-auto p-2">
-              {daily.isLoading && <div className="p-5 text-center text-[13px] text-muted">Loading…</div>}
-              {!daily.isLoading && notMarked.length === 0 && (
-                <div className="p-5 text-center text-[13px] italic text-muted">All staff accounted for!</div>
-              )}
-              {notMarked.map((emp) => (
-                <div key={emp.id} className="flex items-center justify-between rounded-lg p-3 transition-all hover:bg-hover">
-                  <div className="flex flex-col">
-                    <span className="text-[13px] font-bold text-ink">{emp.name}</span>
-                    <span className="text-[11px] text-muted">{emp.employee_code} · {humanize(emp.role)}</span>
-                  </div>
-                  {writable && (
-                    <button type="button" onClick={() => setMarking(emp)}
-                      className="rounded-md border-none bg-accent-light px-3 py-1.5 text-[11px] font-extrabold uppercase text-accent transition-colors hover:bg-accent hover:text-white">
-                      Mark
-                    </button>
-                  )}
+        <aside className="overflow-hidden rounded-2xl border border-line bg-surface shadow-premium max-lg:order-first">
+          <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+            <div>
+              <h3 className="m-0 text-[15px] font-bold text-ink">Pending mark</h3>
+              <p className="m-0 mt-0.5 text-xs text-muted">{formatDate(date)}</p>
+            </div>
+            {notMarked.length > 0 && <span className="tab-count">{notMarked.length}</span>}
+          </header>
+          <div className="max-h-[calc(100vh-330px)] overflow-y-auto p-2">
+            {daily.isLoading && <p className="m-0 p-5 text-center text-[13px] text-muted">Loading…</p>}
+            {!daily.isLoading && notMarked.length === 0 && (
+              <div className="flex flex-col items-center gap-2 p-6 text-center">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-success-soft text-success">
+                  <Icon name="check" className="h-5 w-5" />
+                </span>
+                <span className="text-[13px] font-semibold text-muted">All staff accounted for</span>
+              </div>
+            )}
+            {notMarked.map((emp) => (
+              <div key={emp.id} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-hover">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-ink">{emp.name}</div>
+                  <div className="text-xs text-muted">{emp.employee_code} · {humanize(emp.role)}</div>
                 </div>
-              ))}
-            </div>
+                {writable && (
+                  <button type="button" className="btn-status-action btn-red" onClick={() => setMarking(emp)}>Mark</button>
+                )}
+              </div>
+            ))}
           </div>
-        </div>
+        </aside>
       </div>
 
-      <MarkModal employee={marking} date={date} onClose={() => setMarking(null)} />
-      <HistoryModal target={history} onClose={() => setHistory(null)} />
+      {marking && <AttendanceMarkModal employee={marking} date={date} onClose={() => setMarking(null)} />}
+      {history && <AttendanceHistoryDrawer target={history} onClose={() => setHistory(null)} />}
     </div>
-  );
-}
-
-function CardHeader({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex items-center border-b border-line-light px-5 py-4 text-sm font-extrabold uppercase tracking-[0.05em] text-ink">
-      {children}
-    </div>
-  );
-}
-
-const markSchema = z.object({
-  status: z.enum(ATTENDANCE_STATUSES),
-  notes: z.string().trim().max(300, "Max 300 characters"),
-});
-type MarkValues = z.infer<typeof markSchema>;
-
-function MarkModal({ employee, date, onClose }: { employee: UnmarkedEmployee | null; date: string; onClose: () => void }) {
-  const qc = useQueryClient();
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<MarkValues>({
-    resolver: zodResolver(markSchema),
-    defaultValues: { status: "PRESENT", notes: "" },
-  });
-
-  useEffect(() => {
-    if (employee) reset({ status: "PRESENT", notes: "" });
-  }, [employee, reset]);
-
-  const mark = useMutation({
-    mutationFn: (v: MarkValues) => attendanceApi.mark({
-      employee_id: employee?.id ?? "", status: v.status, notes: v.notes.trim() || null, date,
-    }),
-    onSuccess: async (res) => {
-      notify.success(res.message);
-      await qc.invalidateQueries({ queryKey: attendanceKeys.all });
-      onClose();
-    },
-    onError: notify.error,
-  });
-
-  return (
-    <Modal open={!!employee} title={`Mark Attendance: ${employee?.name ?? ""}`} onClose={onClose} width="560px">
-      <form onSubmit={handleSubmit((v) => mark.mutate(v))} noValidate className="flex flex-col gap-5 p-2">
-        <p className="m-0 text-[13px] font-medium text-muted">Date: <strong className="text-ink">{formatDate(date)}</strong></p>
-        <Field label="Status" htmlFor="att-status" error={errors.status?.message}>
-          <Select id="att-status" {...register("status")}>
-            {ATTENDANCE_STATUSES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
-          </Select>
-        </Field>
-        <Field label="Notes" htmlFor="att-notes" error={errors.notes?.message}>
-          <Textarea id="att-notes" rows={3} placeholder="Any comments..." className="min-h-[100px]"
-            invalid={!!errors.notes} {...register("notes")} />
-        </Field>
-        <div className="form-actions-modern mt-2">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={mark.isPending}>Submit</Button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-const SUMMARY_TILES = [
-  { key: "present", label: "Present", cls: "bg-success-soft border-success-line text-success" },
-  { key: "absent", label: "Absent", cls: "bg-danger-soft border-danger-line text-danger" },
-  { key: "late", label: "Late", cls: "bg-warning-soft border-warning-line text-warning" },
-  { key: "half_day", label: "Half Day", cls: "bg-info-soft border-info-line text-info" },
-  { key: "on_leave", label: "On Leave", cls: "bg-plum-soft border-plum-line text-plum" },
-] as const;
-
-const historyColumns: ColumnDef<AttendanceRecord, unknown>[] = [
-  { header: "Date", accessorKey: "attendance_date", meta: { width: "130px" }, cell: ({ row }) => formatDate(row.original.attendance_date) },
-  { header: "Status", accessorKey: "status", meta: { width: "120px" }, cell: ({ row }) => <StatusBadge value={row.original.status} /> },
-  { header: "In", accessorKey: "check_in_time", meta: { width: "90px" }, cell: ({ row }) => formatTime(row.original.check_in_time) },
-  { header: "Out", accessorKey: "check_out_time", meta: { width: "90px" }, cell: ({ row }) => formatTime(row.original.check_out_time) },
-  { header: "Notes", accessorKey: "notes", cell: ({ row }) => row.original.notes || "—" },
-];
-
-const selectCls = "rounded-lg border-[1.5px] border-line bg-surface px-3.5 py-2.5 text-sm font-semibold text-ink outline-none cursor-pointer focus:border-secondary-grey";
-
-function HistoryModal({ target, onClose }: { target: HistoryTarget | null; onClose: () => void }) {
-  const branch = useBranchStore((s) => s.selectedBranchId);
-  const now = new Date();
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
-  const years = [now.getFullYear() - 2, now.getFullYear() - 1, now.getFullYear()];
-
-  // Reset to the current month whenever a different employee is opened.
-  const targetId = target?.id;
-  useEffect(() => {
-    if (!targetId) return;
-    const d = new Date();
-    setMonth(d.getMonth() + 1);
-    setYear(d.getFullYear());
-  }, [targetId]);
-
-  const q = { employee_id: target?.id ?? "", month, year };
-  const monthly = useQuery({
-    queryKey: attendanceKeys.monthly(branch, q),
-    queryFn: () => attendanceApi.monthly(q),
-    enabled: !!target,
-  });
-  const data = monthly.data?.data;
-
-  return (
-    <Modal open={!!target} title={`Monthly History: ${target?.name ?? ""}`} onClose={onClose}>
-      <div className="p-2.5">
-        <div className="mb-5 flex flex-wrap items-center gap-2.5">
-          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={selectCls}>
-            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))} className={selectCls}>
-            {years.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-          {data && <span className="ml-auto text-[13px] font-semibold text-muted">{data.summary.total_days_in_month} days in month</span>}
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-          {SUMMARY_TILES.map((t) => (
-            <div key={t.key} className={cn("flex flex-col items-center rounded-xl border p-4", t.cls)}>
-              <span className="mb-1 text-xl font-extrabold">{data?.summary[t.key] ?? 0}</span>
-              <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-muted">{t.label}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-5">
-          <DataTable
-            columns={historyColumns}
-            data={data?.records ?? []}
-            loading={monthly.isLoading}
-            emptyMessage="No history found for this month."
-            getRowId={(r) => r.id}
-            maxHeightClass="max-h-[350px]"
-          />
-        </div>
-      </div>
-    </Modal>
   );
 }

@@ -10,7 +10,7 @@ export function StarRating({ value, className }: { value: number; className?: st
           key={i}
           name="star"
           strokeWidth={1.5}
-          className={cn("h-4 w-4", i <= value ? "fill-[#fbbf24] text-[#fbbf24]" : "fill-line text-faint")}
+          className={cn("h-4 w-4", i <= value ? "fill-warning text-warning" : "fill-line text-faint")}
         />
       ))}
     </div>
@@ -22,7 +22,7 @@ export function AverageRating({ value }: { value: number | null | undefined }) {
   return (
     <div className="flex items-center gap-2">
       <span className="text-2xl font-extrabold text-warning">{value != null ? value.toFixed(1) : "—"}</span>
-      <Icon name="star" strokeWidth={1.5} className="h-6 w-6 fill-[#fbbf24] text-[#fbbf24]" />
+      <Icon name="star" strokeWidth={1.5} className="h-6 w-6 fill-warning text-warning" />
     </div>
   );
 }

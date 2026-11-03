@@ -23,6 +23,7 @@ function page<K extends string>(loader: () => Promise<Record<K, ComponentType>>,
 
 const DashboardPage = page(() => import("@/features/dashboard/pages/DashboardPage"), "DashboardPage");
 const MembersPage = page(() => import("@/features/members/pages/MembersPage"), "MembersPage");
+const MemberFormPage = page(() => import("@/features/members/pages/MemberFormPage"), "MemberFormPage");
 const LeadsPage = page(() => import("@/features/leads/pages/LeadsPage"), "LeadsPage");
 const PlansPage = page(() => import("@/features/plans/pages/PlansPage"), "PlansPage");
 const SubscriptionsPage = page(() => import("@/features/subscriptions/pages/SubscriptionsPage"), "SubscriptionsPage");
@@ -30,9 +31,11 @@ const PaymentsPage = page(() => import("@/features/payments/pages/PaymentsPage")
 const InvoicePage = page(() => import("@/features/payments/pages/InvoicePage"), "InvoicePage");
 const PersonalTrainingPage = page(() => import("@/features/training/pages/PersonalTrainingPage"), "PersonalTrainingPage");
 const StaffPage = page(() => import("@/features/staff/pages/StaffPage"), "StaffPage");
+const EmployeeFormPage = page(() => import("@/features/staff/pages/EmployeeFormPage"), "EmployeeFormPage");
 const AttendancePage = page(() => import("@/features/attendance/pages/AttendancePage"), "AttendancePage");
 const SalaryPage = page(() => import("@/features/salary/pages/SalaryPage"), "SalaryPage");
 const DietPlansPage = page(() => import("@/features/diet/pages/DietPlansPage"), "DietPlansPage");
+const DietBuilderPage = page(() => import("@/features/diet/pages/DietBuilderPage"), "DietBuilderPage");
 
 function Guarded({ permission, children }: { permission: string; children: ReactNode }) {
   return (
@@ -76,15 +79,21 @@ export default function App() {
                 <Route index element={<HomeRedirect />} />
                 <Route path="dashboard" element={<Guarded permission="dashboard:view"><DashboardPage /></Guarded>} />
                 <Route path="members" element={<Guarded permission="member:list"><MembersPage /></Guarded>} />
+                <Route path="members/new" element={<Guarded permission="member:create"><MemberFormPage /></Guarded>} />
+                <Route path="members/:id" element={<Guarded permission="member:list"><MemberFormPage /></Guarded>} />
+                <Route path="members/:id/edit" element={<Guarded permission="member:update"><MemberFormPage /></Guarded>} />
                 <Route path="leads" element={<Guarded permission="lead:list"><LeadsPage /></Guarded>} />
                 <Route path="plans" element={<Guarded permission="plan:list"><PlansPage /></Guarded>} />
                 <Route path="subscriptions" element={<Guarded permission="subscription:list"><SubscriptionsPage /></Guarded>} />
                 <Route path="payments" element={<Guarded permission="payment:list"><PaymentsPage /></Guarded>} />
                 <Route path="personal-training" element={<Guarded permission="pt:list"><PersonalTrainingPage /></Guarded>} />
                 <Route path="staff" element={<Guarded permission="employee:list"><StaffPage /></Guarded>} />
+                <Route path="staff/new" element={<Guarded permission="employee:create"><EmployeeFormPage /></Guarded>} />
+                <Route path="staff/:id/edit" element={<Guarded permission="employee:update"><EmployeeFormPage /></Guarded>} />
                 <Route path="attendance" element={<Guarded permission="attendance:list"><AttendancePage /></Guarded>} />
                 <Route path="salary" element={<Guarded permission="salary:list"><SalaryPage /></Guarded>} />
                 <Route path="diet-plans" element={<Guarded permission="diet:list"><DietPlansPage /></Guarded>} />
+                <Route path="diet-plans/:memberId" element={<Guarded permission="diet:manage"><DietBuilderPage /></Guarded>} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Routes>

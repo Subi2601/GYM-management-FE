@@ -15,6 +15,9 @@ export interface Paginated<T> {
   page_size: number;
 }
 
+/** GET /<list>/counts — row count per list tab, from one backend query (`{ all: 12, active: 4, … }`). */
+export type TabCounts<K extends string> = Record<K, number>;
+
 export interface PageQuery {
   page?: number;
   page_size?: number;

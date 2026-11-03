@@ -1,118 +1,143 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-import { DataTable } from "@/components/ui/DataTable";
-import { Icon } from "@/components/ui/Icon";
+import { ActionGroup, ActionIcon, DataTable } from "@/components/ui/DataTable";
+import { FilterSelect, ListToolbar, type ActiveFilter } from "@/components/ui/ListToolbar";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { dietApi, dietKeys } from "@/features/diet/api";
-import { DietBuilderModal } from "@/features/diet/components/DietBuilderModal";
-import { DietViewModal } from "@/features/diet/components/DietViewModal";
+import { DietViewDrawer } from "@/features/diet/components/DietViewDrawer";
 import { TierBadge } from "@/features/diet/components/TierBadge";
-import { useListState } from "@/hooks/use-list-state";
+import { paginationProps, useListState } from "@/hooks/use-list-state";
 import { formatDate } from "@/lib/format";
 import { useCan } from "@/stores/auth-store";
 import { useBranchStore } from "@/stores/branch-store";
-import type { EligibleMember } from "@/types/diet";
+import type { EligibleListQuery, EligibleMember, EligibleSortKey } from "@/types/diet";
 
-const miniBtn = "flex h-8 w-8 items-center justify-center rounded-md border-none transition-all disabled:cursor-not-allowed disabled:opacity-40";
+const sortKey = (key: EligibleSortKey) => key;
 
-/** Diet Plan Management — eligible members with tier, plan status, configure / view. */
+type PlanStatus = "" | "yes" | "no";
+const PLAN_STATUS_OPTIONS = [
+  { value: "yes", label: "Has plan" },
+  { value: "no", label: "No plan" },
+];
+
+/** Full-page builder; the row travels as router state (`{ member }`) so the page needn't look the member up again. */
+const builderPath = (memberId: string) => `/diet-plans/${memberId}`;
+
+/** Diet plans — eligible members with tier and plan status; search, plan-status filter, sortable columns. */
 export function DietPlansPage() {
   const branch = useBranchStore((s) => s.selectedBranchId);
+  const navigate = useNavigate();
   const canManage = useCan("diet:manage");
   const list = useListState();
-  const [buildFor, setBuildFor] = useState<EligibleMember | null>(null);
+  const [planStatus, setPlanStatus] = useState<PlanStatus>("");
   const [viewFor, setViewFor] = useState<EligibleMember | null>(null);
 
+  const { setPage } = list;
+  useEffect(() => setPage(1), [planStatus, setPage]);
+
+  const query: EligibleListQuery = {
+    ...list.query, has_plan: planStatus === "" ? undefined : planStatus === "yes",
+  };
   const eligible = useQuery({
-    queryKey: dietKeys.eligible(branch, list.query),
-    queryFn: async () => (await dietApi.eligible(list.query)).data,
+    queryKey: dietKeys.eligible(branch, query),
+    queryFn: async () => (await dietApi.eligible(query)).data,
     placeholderData: keepPreviousData,
   });
 
-  const columns = useMemo<ColumnDef<EligibleMember, unknown>[]>(() => [
-    { accessorKey: "registration_id", header: "Reg ID", meta: { width: "110px" } },
-    {
-      id: "name", header: "Member Name", meta: { width: "220px" },
-      cell: ({ row }) => (
-        <div className="flex flex-col">
-          <span className="font-bold text-ink">{row.original.name}</span>
-          <span className="text-xs font-medium text-muted">{row.original.phone}</span>
-        </div>
-      ),
-    },
-    {
-      id: "tier", header: "Plan Tier", meta: { width: "130px" },
-      cell: ({ row }) => <TierBadge tier={row.original.eligible_tier} />,
-    },
-    {
-      id: "status", header: "Status", meta: { width: "200px" },
-      cell: ({ row }) => {
-        const m = row.original;
-        if (!m.has_plan) return <StatusBadge value="PENDING" tone="grey" label="Not Configured" />;
-        return (
-          <div className="flex flex-col items-start gap-1">
+  const columns = useMemo<ColumnDef<EligibleMember, unknown>[]>(() => {
+    const openBuilder = (m: EligibleMember) => navigate(builderPath(m.member_id), { state: { member: m } });
+    return [
+      { accessorKey: "registration_id", header: "Reg ID", meta: { width: "110px", sortKey: sortKey("registration_id") },
+        cell: ({ row }) => <span className="font-mono text-[13px] font-semibold text-secondary-grey">{row.original.registration_id}</span> },
+      { id: "name", header: "Member", meta: { sortKey: sortKey("name") },
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <div className="truncate font-semibold text-ink">{row.original.name}</div>
+            <div className="text-xs text-muted">{row.original.phone}</div>
+          </div>
+        ) },
+      { id: "eligible", header: "Eligible tier", meta: { width: "130px" },
+        cell: ({ row }) => <TierBadge tier={row.original.eligible_tier} /> },
+      { id: "plan", header: "Plan", meta: { width: "170px", sortKey: sortKey("plan_tier") },
+        cell: ({ row }) => {
+          const m = row.original;
+          if (!m.has_plan) return <StatusBadge value="NO_PLAN" label="Not configured" />;
+          return (
             <div className="flex items-center gap-1.5">
               <StatusBadge value="ACTIVE" label="Configured" />
-              {m.plan_tier && m.plan_tier !== m.eligible_tier && (
-                <span className="text-[11px] font-bold text-muted">({m.plan_tier})</span>
-              )}
+              {m.plan_tier && m.plan_tier !== m.eligible_tier && <TierBadge tier={m.plan_tier} />}
             </div>
-            {m.last_modified_date && (
-              <span className="text-[11px] font-medium text-muted">Updated {formatDate(m.last_modified_date)}</span>
-            )}
-          </div>
-        );
+          );
+        } },
+      { id: "updated", header: "Last updated", meta: { width: "130px", sortKey: sortKey("last_modified_date") },
+        cell: ({ row }) => row.original.last_modified_date
+          ? <span className="whitespace-nowrap">{formatDate(row.original.last_modified_date)}</span>
+          : <span className="text-muted">—</span> },
+      {
+        id: "actions", header: "", meta: { width: "170px" },
+        cell: ({ row }) => {
+          const m = row.original;
+          return (
+            <ActionGroup>
+              {canManage && (
+                <button type="button" className={m.has_plan ? "btn-status-action btn-grey" : "btn-status-action btn-red"}
+                  onClick={() => openBuilder(m)}>
+                  {m.has_plan ? "Edit plan" : "Build plan"}
+                </button>
+              )}
+              {m.has_plan && <ActionIcon kind="view" title="View plan" onClick={() => setViewFor(m)} />}
+            </ActionGroup>
+          );
+        },
       },
-    },
-    {
-      id: "actions", header: "Actions", meta: { width: "120px" },
-      cell: ({ row }) => (
-        <div className="flex justify-end gap-2">
-          <button type="button" className={`${miniBtn} bg-hover text-secondary-grey hover:enabled:bg-line hover:enabled:text-ink`}
-            title={row.original.has_plan ? "View Plan" : "No plan configured yet"} disabled={!row.original.has_plan}
-            onClick={() => setViewFor(row.original)}>
-            <Icon name="eye" className="h-3.5 w-3.5" />
-          </button>
-          {canManage && (
-            <button type="button" className={`${miniBtn} bg-info-soft text-info hover:bg-info-soft hover:text-info`}
-              title={row.original.has_plan ? "Configure" : "Build Plan"} onClick={() => setBuildFor(row.original)}>
-              <Icon name="edit" className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-      ),
-    },
-  ], [canManage]);
+    ];
+  }, [canManage, navigate]);
+
+  const active: ActiveFilter[] = [];
+  if (planStatus) {
+    active.push({ label: `Plan: ${planStatus === "yes" ? "Has plan" : "No plan"}`, onRemove: () => setPlanStatus("") });
+  }
+
+  const data = eligible.data;
+  const filtered = !!list.debouncedSearch || active.length > 0;
 
   return (
-    <div className="w-full">
-      <PageHeader
-        title="Diet Plan Management"
-        subtitle="Tier-based nutrition planning & macro calculation"
-        search={{ value: list.search, onChange: list.setSearch, placeholder: "Search members..." }}
-      />
+    <div>
+      <PageHeader title="Diet plans" subtitle="Tier-based nutrition plans and macro targets for eligible members" />
 
       <DataTable
         columns={columns}
-        data={eligible.data?.items ?? []}
+        data={data?.items ?? []}
         loading={eligible.isLoading}
-        emptyMessage="No members eligible for diet plan found."
+        fetching={eligible.isFetching}
         getRowId={(r) => r.member_id}
-        maxHeightClass="max-h-[calc(100vh-280px)]"
-        pagination={{
-          page: list.page,
-          pageSize: list.pageSize,
-          total: eligible.data?.total ?? 0,
-          onPageChange: list.setPage,
-          onPageSizeChange: list.setPageSize,
+        onRowClick={(m) => {
+          if (m.has_plan) setViewFor(m);
+          else if (canManage) navigate(builderPath(m.member_id), { state: { member: m } });
         }}
+        emptyIcon="cup"
+        emptyMessage={filtered ? "No members match these filters" : "No members eligible for a diet plan"}
+        emptyHint={filtered ? "Try a different search or clear the filters."
+          : "Members appear here once they are enrolled on a diet add-on."}
+        sorting={list.sorting}
+        pagination={paginationProps(list, data?.total)}
+        toolbar={
+          <ListToolbar
+            search={{ value: list.search, onChange: list.setSearch, placeholder: "Search name, phone or reg ID" }}
+            filters={
+              <FilterSelect placeholder="Any plan status" ariaLabel="Plan status" value={planStatus}
+                onChange={(v) => setPlanStatus(v as PlanStatus)} options={PLAN_STATUS_OPTIONS} />
+            }
+            active={active}
+          />
+        }
       />
 
-      <DietBuilderModal member={buildFor} onClose={() => setBuildFor(null)} />
-      <DietViewModal member={viewFor} onClose={() => setViewFor(null)} />
+      {viewFor && <DietViewDrawer member={viewFor} onClose={() => setViewFor(null)} />}
     </div>
   );
 }

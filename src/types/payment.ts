@@ -1,3 +1,4 @@
+import type { SortDir } from "@/hooks/use-list-state";
 import type { PageQuery } from "@/types/api";
 import type { PaymentMode, PlanServiceType, PlanType } from "@/types/enums";
 
@@ -24,11 +25,18 @@ export interface Payment {
   updated_at: string;
 }
 
+/** `sort_by` values accepted by GET /payments. */
+export type PaymentSortKey = "receipt_no" | "payment_date" | "member_name" | "paid_amount" | "balance_amount" | "created_at";
+
 export interface PaymentListQuery extends PageQuery {
   payment_mode?: PaymentMode;
   /** YYYY-MM-DD */
   date_from?: string;
   date_to?: string;
+  /** true = only payments with a balance due, false = fully paid. */
+  has_balance?: boolean;
+  sort_by?: string;
+  sort_dir?: SortDir;
 }
 
 /** GET /payments/stats */

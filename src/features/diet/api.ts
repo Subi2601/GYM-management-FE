@@ -1,10 +1,11 @@
 import { apiDelete, apiGet, apiPost, apiPut, cleanParams } from "@/lib/api-client";
 import { ApiError } from "@/lib/api-error";
-import { ALL_ROWS, type PageQuery, type Paginated } from "@/types/api";
-import type { DietPlan, DietPlanItemCreate, DietPlanUpsert, DietShareText, EligibleMember, FoodItem } from "@/types/diet";
+import { ALL_ROWS, type Paginated } from "@/types/api";
+import type { DietPlan, DietPlanItemCreate, DietPlanUpsert, DietShareText, EligibleListQuery, EligibleMember,
+  FoodItem } from "@/types/diet";
 
 export const dietApi = {
-  eligible: (query: PageQuery) =>
+  eligible: (query: EligibleListQuery) =>
     apiGet<Paginated<EligibleMember>>("/diet-plans/eligible-members", cleanParams(query)),
   /** The member's plan, or null when none has been configured yet (backend 404). */
   plan: async (memberId: string): Promise<DietPlan | null> => {
@@ -26,7 +27,8 @@ export const dietApi = {
 
 export const dietKeys = {
   all: (branch: string | null | undefined) => ["diet", branch] as const,
-  eligible: (branch: string | null | undefined, query: PageQuery) => ["diet", branch, "eligible", query] as const,
+  eligibleAll: (branch: string | null | undefined) => ["diet", branch, "eligible"] as const,
+  eligible: (branch: string | null | undefined, query: EligibleListQuery) => ["diet", branch, "eligible", query] as const,
   plan: (branch: string | null | undefined, memberId: string) => ["diet", branch, "plan", memberId] as const,
   share: (branch: string | null | undefined, memberId: string) => ["diet", branch, "share", memberId] as const,
   foods: (branch: string | null | undefined) => ["food-items", branch] as const,

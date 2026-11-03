@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Modal } from "@/components/ui/Modal";
+import { Drawer } from "@/components/ui/Modal";
 import { dietApi, dietKeys } from "@/features/diet/api";
 import { num } from "@/features/diet/calc";
 import { MacroPills } from "@/features/diet/components/MealBlock";
@@ -13,13 +13,13 @@ import { useBranchStore } from "@/stores/branch-store";
 import type { DietPlan, EligibleMember } from "@/types/diet";
 
 const PRINT_ROOT_ID = "diet-plan-print-root";
-/** While the view modal is open, printing shows only the plan sheet (A4, colours kept). */
+/** While the view drawer is open, printing shows only the plan sheet (A4, colours kept). */
 const PRINT_CSS = `
 @media print {
   @page { size: A4; margin: 1cm; }
   body > *:not(#${PRINT_ROOT_ID}) { display: none !important; }
   #${PRINT_ROOT_ID} { display: block !important; }
-  body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }`;
 
 /** The printable plan (".plan-view-container") — used on screen and in the print portal. */
@@ -133,23 +133,21 @@ function PlanSheet({ plan }: { plan: DietPlan }) {
   );
 }
 
-/** "Member Diet Plan" — read-only sheet with Download PDF (print) and WhatsApp share. */
-export function DietViewModal({ member, onClose }: { member: EligibleMember | null; onClose: () => void }) {
+/** Diet plan view — read-only plan sheet in a wide drawer, with Download PDF (print) and WhatsApp share. */
+export function DietViewDrawer({ member, onClose }: { member: EligibleMember; onClose: () => void }) {
   const branch = useBranchStore((s) => s.selectedBranchId);
-  const open = member !== null;
-  const memberId = member?.member_id ?? "";
+  const memberId = member.member_id;
 
   const planQuery = useQuery({
     queryKey: dietKeys.plan(branch, memberId),
     queryFn: () => dietApi.plan(memberId),
-    enabled: open,
   });
   const plan = planQuery.data ?? null;
 
   const share = useQuery({
     queryKey: dietKeys.share(branch, memberId),
     queryFn: async () => (await dietApi.shareText(memberId)).data,
-    enabled: open && plan !== null,
+    enabled: plan !== null,
   });
 
   const shareWhatsApp = () => {
@@ -157,12 +155,35 @@ export function DietViewModal({ member, onClose }: { member: EligibleMember | nu
   };
 
   return (
-    <Modal open={open} title="Member Diet Plan" onClose={onClose} width="900px" bodyClassName="p-4 md:p-6">
+    <Drawer
+      open
+      title="Diet plan"
+      subtitle={`${member.name} · ${member.registration_id}`}
+      onClose={onClose}
+      width="880px"
+      bodyClassName="px-4 py-4 md:px-6"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Close</Button>
+          {plan && (
+            <>
+              <button type="button" onClick={shareWhatsApp} disabled={!share.data}
+                title={share.isError ? "Could not prepare the WhatsApp message" : undefined}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-transparent bg-success px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:enabled:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+                <Icon name="whatsapp" className="h-4 w-4" />
+                {share.isLoading ? "Preparing…" : "Share on WhatsApp"}
+              </button>
+              <Button icon={<Icon name="print" className="h-4 w-4" />} onClick={() => window.print()}>Download PDF</Button>
+            </>
+          )}
+        </>
+      }
+    >
       {planQuery.isLoading && <div className="p-10 text-center text-sm text-muted">Loading diet plan…</div>}
       {planQuery.isError && <div className="p-10 text-center text-sm font-semibold text-accent">Failed to load the diet plan.</div>}
       {planQuery.isSuccess && !plan && (
-        <div className="rounded-xl border-2 border-dashed border-line bg-subtle p-8 text-center italic text-muted">
-          No active plan found. Please configure one first.
+        <div className="rounded-xl border-2 border-dashed border-line bg-subtle p-8 text-center text-sm text-muted">
+          No plan configured yet. Build one from the Diet plans list.
         </div>
       )}
       {plan && (
@@ -177,21 +198,6 @@ export function DietViewModal({ member, onClose }: { member: EligibleMember | nu
           )}
         </>
       )}
-
-      <div className="form-actions-modern no-print items-center md:justify-between">
-        <Button variant="secondary" onClick={onClose}>Close</Button>
-        {plan && (
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <button type="button" onClick={shareWhatsApp} disabled={!share.data}
-              title={share.isError ? "Could not prepare the WhatsApp message" : undefined}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border-none bg-[#25d366] px-5 py-2.5 text-sm font-bold text-white transition-opacity hover:enabled:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
-              <Icon name="whatsapp" className="h-4 w-4" />
-              {share.isLoading ? "Preparing…" : "Share WhatsApp"}
-            </button>
-            <Button icon={<Icon name="print" className="h-4 w-4" />} onClick={() => window.print()}>Download PDF</Button>
-          </div>
-        )}
-      </div>
-    </Modal>
+    </Drawer>
   );
 }

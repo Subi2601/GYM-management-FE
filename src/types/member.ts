@@ -1,4 +1,4 @@
-import type { Gender, MemberStatus, MembershipState } from "@/types/enums";
+import type { FitnessGoal, Gender, MemberStatus, MembershipState } from "@/types/enums";
 
 /** GET /members, /members/{id} — see backend app/schemas/member.py */
 export interface Member {
@@ -14,7 +14,7 @@ export interface Member {
   blood_group: string | null;
   weight: number | null;
   height: number | null;
-  fitness_goal: string | null;
+  fitness_goal: FitnessGoal | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   joining_date: string;
@@ -32,8 +32,3 @@ export interface Member {
 
 export type MemberInput = Partial<Omit<Member, "id" | "branch_id" | "registration_id" | "membership_state" |
   "current_plan_id" | "current_plan_name" | "expiry_date" | "created_at" | "updated_at">>;
-
-export interface MemberCounts {
-  total: number;
-  active: number;
-}

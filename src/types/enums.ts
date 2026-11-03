@@ -10,7 +10,16 @@ export type MembershipState = "ACTIVE" | "EXPIRING" | "EXPIRED" | "NO_PLAN";
 export const LEAD_STATUSES = ["NEW", "FOLLOW_UP", "JOINED", "NOT_INTERESTED", "JOINED_ELSEWHERE"] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
-export const PLAN_TYPES = ["MEMBERSHIP", "ADD_ON"] as const;
+export const FITNESS_GOALS = [
+  "WEIGHT_LOSS", "MUSCLE_GAIN", "BODY_TONING", "WEIGHT_GAIN",
+  "STRENGTH", "ENDURANCE", "SPORTS_PERFORMANCE", "COMPETITION_PREP",
+  "GENERAL_FITNESS", "FLEXIBILITY", "REHAB", "MEDICAL_CONDITION", "PRE_POST_NATAL", "SENIOR_FITNESS",
+  "STRESS_RELIEF", "OTHER",
+] as const;
+export type FitnessGoal = (typeof FITNESS_GOALS)[number];
+
+/** CUSTOM = a membership priced as days × per-day rate (`price` holds the total). */
+export const PLAN_TYPES = ["MEMBERSHIP", "ADD_ON", "CUSTOM"] as const;
 export type PlanType = (typeof PLAN_TYPES)[number];
 
 export const PLAN_SERVICE_TYPES = ["GENERAL", "PERSONAL_TRAINING", "DIET"] as const;

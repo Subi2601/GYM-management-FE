@@ -9,6 +9,8 @@ export const dashboardApi = {
 };
 
 export const dashboardKeys = {
+  /** Prefix for invalidating every dashboard query after member / lead / billing changes. */
+  all: ["dashboard"] as const,
   summary: (branch: string | null | undefined) => ["dashboard", "summary", branch] as const,
 };
 

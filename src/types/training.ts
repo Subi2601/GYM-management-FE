@@ -1,4 +1,4 @@
-import type { PTStatus } from "@/types/enums";
+import type { FitnessGoal, PTStatus } from "@/types/enums";
 
 /** GET /personal-training — backend app/schemas/training.py PTSubscriptionResponse */
 export interface PTSubscription {
@@ -14,7 +14,7 @@ export interface PTSubscription {
   plan_id: string | null;
   plan_name: string;
   subscription_id: string | null;
-  goal: string | null;
+  goal: FitnessGoal | null;
   total_sessions: number;
   sessions_remaining: number;
   sessions_used: number;
@@ -29,12 +29,19 @@ export interface PTSubscription {
 /** Status filter of GET /personal-training (ALL = no status filter). */
 export type PTStatusFilter = PTStatus | "ALL";
 
+/** Server sort keys of GET /personal-training (`sort_by`). */
+export type PTSortKey = "member_name" | "trainer_name" | "start_date" | "expiry_date" | "sessions_remaining" | "created_at";
+
 export interface PTListQuery {
   page: number;
   page_size: number;
   search?: string;
+  sort_by?: string;
+  sort_dir?: "asc" | "desc";
   status: PTStatusFilter;
   paid_only: boolean;
+  trainer_id?: string;
+  member_id?: string;
 }
 
 /** GET /personal-training/{id}/sessions */

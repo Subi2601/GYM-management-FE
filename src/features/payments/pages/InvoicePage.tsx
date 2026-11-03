@@ -14,7 +14,9 @@ const LETTERHEAD = {
   gstin: "GSTIN: 33CLMPA7280H2Z2",
 };
 
-const BRAND = "text-[#8B0000]";
+/** Invoice brand red: the light-palette accent-dark token (the sheet is always `.theme-light`). */
+const BRAND = "text-accent-dark";
+const BRAND_BORDER = "border-accent-dark";
 
 /** Printable receipt at /invoice/:paymentId — rendered without the app shell, auto-prints once loaded. */
 export function InvoicePage() {
@@ -51,7 +53,7 @@ export function InvoicePage() {
 
       {invoice.isLoading && (
         <StatusCard>
-          <div className="mx-auto mb-[15px] h-10 w-10 animate-spin rounded-full border-4 border-hover border-t-[#8B0000]" />
+          <div className="mx-auto mb-[15px] h-10 w-10 animate-spin rounded-full border-4 border-hover border-t-accent-dark" />
           <p className="m-0">Generating Invoice...</p>
         </StatusCard>
       )}
@@ -98,13 +100,13 @@ const money = (n: number) => formatINR(n);
 
 function InvoiceSheet({ data }: { data: Invoice }) {
   const branchLine = [data.branch_name, data.branch_location].filter(Boolean).join(", ");
-  const thCls = cn("border-b-[1.5pt] border-[#8B0000] bg-subtle p-[8pt] text-left text-[8.5pt] font-bold [print-color-adjust:exact] [-webkit-print-color-adjust:exact]", BRAND);
+  const thCls = cn("border-b-[1.5pt] bg-subtle p-[8pt] text-left text-[8.5pt] font-bold [print-color-adjust:exact] [-webkit-print-color-adjust:exact]", BRAND, BRAND_BORDER);
   const tdCls = "border-b border-line-light px-[8pt] py-[10pt] text-[9.5pt] text-[#334155]";
 
   return (
     <div className="relative mb-10 box-border flex min-h-[297mm] w-[210mm] flex-col bg-white p-[15mm] shadow-[0_0_15px_rgba(0,0,0,0.1)] max-[794px]:w-full max-[794px]:p-[10mm] print:m-0 print:w-full print:p-[12mm] print:shadow-none">
       {/* Corporate header */}
-      <div className="mb-[8mm] flex items-start justify-between border-b-[1.5pt] border-[#8B0000] pb-[6mm] max-[794px]:flex-col max-[794px]:gap-[15px]">
+      <div className={cn("mb-[8mm] flex items-start justify-between border-b-[1.5pt] pb-[6mm] max-[794px]:flex-col max-[794px]:gap-[15px]", BRAND_BORDER)}>
         <div className="flex-1 text-left">
           <h1 className={cn("m-0 mb-[8pt] text-[24pt] font-extrabold uppercase leading-none tracking-[-0.5pt] max-[794px]:text-[20pt]", BRAND)}>
             {data.organization_name || "STAG FITNESS"}
@@ -121,7 +123,7 @@ function InvoiceSheet({ data }: { data: Invoice }) {
 
         <div className="flex flex-col items-end text-right max-[794px]:items-start max-[794px]:text-left">
           <div className={cn("mb-[8pt] text-[20pt] font-extrabold tracking-[2pt]", BRAND)}>INVOICE</div>
-          <div className="flex w-fit flex-col gap-[4pt] rounded-[6pt] border-r-[3pt] border-[#8B0000] bg-subtle p-[8pt] [print-color-adjust:exact]">
+          <div className={cn("flex w-fit flex-col gap-[4pt] rounded-[6pt] border-r-[3pt] bg-subtle p-[8pt] [print-color-adjust:exact]", BRAND_BORDER)}>
             <Meta label="Invoice No:" value={`#${data.receipt_no}`} />
             <Meta label="Date:" value={formatDate(data.payment_date)} />
             <Meta label="Payment Mode:" value={humanize(data.payment_mode)} />

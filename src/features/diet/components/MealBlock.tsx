@@ -91,7 +91,7 @@ export function MealBlock({ memberId, meal, editable, foods }: MealBlockProps) {
         {meal.items.length === 0 && <div className="text-[13px] italic text-muted">No foods assigned</div>}
         {meal.items.map((item) => (
           <div key={item.id}
-            className="flex min-w-[180px] items-center justify-between gap-3 rounded-[10px] border-[1.5px] border-line bg-surface px-3.5 py-2.5 shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+            className="flex min-w-[180px] items-center justify-between gap-3 rounded-[10px] border-[1.5px] border-line bg-surface px-3.5 py-2.5 shadow-subtle">
             <div className="flex flex-col">
               <span className="text-[13px] font-bold text-ink">{item.food_name}</span>
               <span className="text-[11px] font-semibold text-muted">

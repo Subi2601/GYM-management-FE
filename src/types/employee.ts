@@ -1,4 +1,4 @@
-import type { EmployeeRole, EmployeeStatus, PTStatus } from "@/types/enums";
+import type { EmployeeRole, EmployeeStatus, FitnessGoal, PTStatus } from "@/types/enums";
 
 /** GET /employees, /employees/{id} — see backend app/schemas/employee.py (EmployeeResponse). */
 export interface Employee {
@@ -58,8 +58,13 @@ export interface EmployeeInput {
 
 export type EmployeeUpdate = Partial<EmployeeInput>;
 
-/** `status` query of GET /employees. */
-export type EmployeeListFilter = "active" | "archive" | "all";
+/** `status` query of GET /employees (archive = terminated). */
+export const EMPLOYEE_LIST_FILTERS = ["active", "archive", "all"] as const;
+export type EmployeeListFilter = (typeof EMPLOYEE_LIST_FILTERS)[number];
+
+/** `sort_by` values accepted by GET /employees. */
+export type EmployeeSortKey =
+  | "employee_code" | "name" | "role" | "base_salary" | "date_of_joining" | "average_rating" | "created_at";
 
 export interface Feedback {
   id: string;
@@ -91,7 +96,7 @@ export interface PTClient {
   member_name: string;
   plan_id: string | null;
   plan_name: string | null;
-  goal: string | null;
+  goal: FitnessGoal | null;
   total_sessions: number;
   sessions_remaining: number;
   start_date: string;
@@ -114,5 +119,5 @@ export interface PTAssignInput {
   trainer_id: string;
   plan_id: string;
   start_date?: string | null;
-  goal?: string | null;
+  goal?: FitnessGoal | null;
 }

@@ -6,19 +6,19 @@ import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Select } from "@/components/ui/Field";
-import { Modal } from "@/components/ui/Modal";
+import { Field, Input, READONLY_INPUT, Select } from "@/components/ui/Field";
+import { Drawer } from "@/components/ui/Modal";
+import { FormDivider, GRID_2 } from "@/components/ui/Section";
 import { usePlanLookup, useTrainerLookup } from "@/features/lookups/api";
-import { GRID_2, READONLY_INPUT } from "@/features/members/components/wizard-parts";
 import { openInvoice, subscriptionApi, useInvalidateBilling } from "@/features/subscriptions/api";
 import { billingShape, netPayable, PAYMENT_MODE_LABEL, refineBilling, toEnrollPayment } from "@/features/subscriptions/lib/billing";
 import { formatINR } from "@/lib/format";
 import { notify } from "@/lib/notify";
-import { cn } from "@/lib/utils";
 import { PAYMENT_MODES } from "@/types/enums";
 import type { Member } from "@/types/member";
 
 const DISCOUNT_REASONS = ["Referral Offer", "Existing Client Offer", "Festival Special", "Other"] as const;
+const FORM_ID = "addon-service-form";
 
 const schema = z.object({
   ...billingShape,
@@ -34,10 +34,10 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 /**
- * "Add-on Service / Upgrade": one ADD_ON plan billed through POST /subscriptions/enroll.
+ * "Add-on service": one ADD_ON plan billed through POST /subscriptions/enroll.
  * PT add-ons need a trainer and land on Personal Training; Diet add-ons land on Diet Plans.
  */
-export function AddonServiceModal({ member, onClose }: { member: Member; onClose: () => void }) {
+export function AddonServiceDrawer({ member, onClose }: { member: Member; onClose: () => void }) {
   const navigate = useNavigate();
   const invalidateBilling = useInvalidateBilling();
   const addons = usePlanLookup("ADD_ON");
@@ -62,7 +62,7 @@ export function AddonServiceModal({ member, onClose }: { member: Member; onClose
     if (!needsTrainer) setValue("trainer_id", "");
   }, [plan, needsTrainer, setValue]);
 
-  // "Final Amount to Pay" = price − discount (read-only, as in the original).
+  // "Final amount to pay" = price − discount (read-only, as in the original).
   const net = netPayable(plan?.price ?? 0, discount);
   useEffect(() => {
     if (Number.isFinite(net)) setValue("paid_amount", String(net));
@@ -91,58 +91,61 @@ export function AddonServiceModal({ member, onClose }: { member: Member; onClose
     });
 
   return (
-    <Modal open title="Add-on Service / Upgrade" onClose={onClose}>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="px-[5px] py-2.5">
-        <p className="mb-5 mt-0 text-sm leading-normal text-muted">
-          Select an add-on service like Premium Diet, Personal Training, etc. for{" "}
-          <strong className="text-ink">{member.name}</strong> ({member.registration_id}).
-        </p>
-
-        <Field label="Select Service" htmlFor="a-plan" required className="mt-4" error={errors.plan_id?.message}>
-          <Select id="a-plan" invalid={!!errors.plan_id} {...register("plan_id")}>
-            <option value="">{addons.isLoading ? "Loading add-ons…" : "-- Choose Add-on --"}</option>
-            {(addons.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name} ({formatINR(p.price)})</option>)}
-          </Select>
-        </Field>
-
-        {needsTrainer && (
-          <Field label="Assign Trainer" htmlFor="a-trainer" required className="mt-4" error={errors.trainer_id?.message}>
-            <Select id="a-trainer" invalid={!!errors.trainer_id} {...register("trainer_id")}>
-              <option value="">{trainers.isLoading ? "Loading trainers…" : "-- Select Trainer --"}</option>
-              {(trainers.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name} ({t.employee_code})</option>)}
+    <Drawer
+      open
+      title="Add-on service"
+      subtitle={`${member.name} · ${member.registration_id}`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form={FORM_ID} loading={enroll.isPending} disabled={!planId}>Activate &amp; pay</Button>
+        </>
+      }
+    >
+      <form id={FORM_ID} onSubmit={handleSubmit(onSubmit)} noValidate>
+        <FormDivider>Service</FormDivider>
+        <div className="flex flex-col gap-4">
+          <Field label="Add-on" htmlFor="a-plan" required error={errors.plan_id?.message}
+            hint="Premium diet, personal training and other add-on plans">
+            <Select id="a-plan" invalid={!!errors.plan_id} {...register("plan_id")}>
+              <option value="">{addons.isLoading ? "Loading add-ons…" : "Choose an add-on"}</option>
+              {(addons.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name} ({formatINR(p.price)})</option>)}
             </Select>
           </Field>
-        )}
 
-        <div className={cn(GRID_2, "mt-5")}>
-          <Field label="Discount Amount (₹)" htmlFor="a-discount" error={errors.discount_amount?.message}>
+          {needsTrainer && (
+            <Field label="Trainer" htmlFor="a-trainer" required error={errors.trainer_id?.message}>
+              <Select id="a-trainer" invalid={!!errors.trainer_id} {...register("trainer_id")}>
+                <option value="">{trainers.isLoading ? "Loading trainers…" : "Select a trainer"}</option>
+                {(trainers.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name} ({t.employee_code})</option>)}
+              </Select>
+            </Field>
+          )}
+        </div>
+
+        <FormDivider>Payment</FormDivider>
+        <div className={GRID_2}>
+          <Field label="Discount (₹)" htmlFor="a-discount" error={errors.discount_amount?.message}>
             <Input id="a-discount" type="number" min={0} step="0.01" placeholder="e.g. 200" invalid={!!errors.discount_amount}
               {...register("discount_amount")} />
           </Field>
-          <Field label="Offer Type / Reason" htmlFor="a-reason">
+          <Field label="Offer / reason" htmlFor="a-reason">
             <Select id="a-reason" {...register("discount_reason")}>
-              <option value="">No Discount</option>
+              <option value="">No discount</option>
               {DISCOUNT_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
             </Select>
           </Field>
-        </div>
-
-        <div className={cn(GRID_2, "mt-5")}>
-          <Field label="Final Amount to Pay (₹)" htmlFor="a-paid" error={errors.paid_amount?.message}>
+          <Field label="Final amount to pay (₹)" htmlFor="a-paid" error={errors.paid_amount?.message}>
             <Input id="a-paid" type="number" readOnly className={READONLY_INPUT} {...register("paid_amount")} />
           </Field>
-          <Field label="Payment Mode" htmlFor="a-mode" required>
+          <Field label="Payment mode" htmlFor="a-mode" required>
             <Select id="a-mode" {...register("payment_mode")}>
               {PAYMENT_MODES.map((m) => <option key={m} value={m}>{PAYMENT_MODE_LABEL[m]}</option>)}
             </Select>
           </Field>
         </div>
-
-        <div className="form-actions-modern">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={enroll.isPending} disabled={!planId}>Activate &amp; Pay</Button>
-        </div>
       </form>
-    </Modal>
+    </Drawer>
   );
 }

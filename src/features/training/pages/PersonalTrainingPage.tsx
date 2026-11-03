@@ -1,194 +1,238 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { DataTable, ROW_MARKER } from "@/components/ui/DataTable";
+import { ActionGroup, DataTable, ROW_MARKER } from "@/components/ui/DataTable";
 import { Checkbox } from "@/components/ui/Field";
-import { Icon, type IconName } from "@/components/ui/Icon";
+import { Icon } from "@/components/ui/Icon";
+import { FilterSelect, FilterTabs, ListToolbar, type ActiveFilter } from "@/components/ui/ListToolbar";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { trainingApi, trainingKeys } from "@/features/training/api";
+import { useTrainerLookup } from "@/features/lookups/api";
+import { trainingApi, trainingKeys, type PTTab } from "@/features/training/api";
 import { ChangeTrainerModal } from "@/features/training/components/ChangeTrainerModal";
-import { LogSessionModal } from "@/features/training/components/LogSessionModal";
-import { SessionHistoryModal } from "@/features/training/components/SessionHistoryModal";
-import { useListState } from "@/hooks/use-list-state";
+import { LogSessionDrawer } from "@/features/training/components/LogSessionDrawer";
+import { SessionHistoryDrawer } from "@/features/training/components/SessionHistoryDrawer";
+import { paginationProps, useListState, useUrlEnum } from "@/hooks/use-list-state";
 import { formatDate, todayISO } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useCan } from "@/stores/auth-store";
 import { useBranchStore } from "@/stores/branch-store";
-import { PT_STATUSES } from "@/types/enums";
-import type { PTStatusFilter, PTSubscription } from "@/types/training";
+import type { PTListQuery, PTSortKey, PTStatusFilter, PTSubscription } from "@/types/training";
 
-const STATUS_FILTERS: PTStatusFilter[] = [...PT_STATUSES, "ALL"];
+const TABS = ["active", "completed", "expired", "all"] as const satisfies readonly PTTab[];
+type Tab = (typeof TABS)[number];
 
-type RowAction = "log" | "trainer" | "history";
-
-const ACTION_STYLE: Record<RowAction, { label: string; icon: IconName; className: string; title: string }> = {
-  log: { label: "Log", icon: "plus", title: "Log Session",
-    className: "bg-info-soft text-info hover:enabled:bg-info-soft" },
-  trainer: { label: "Trainer", icon: "userCheck", title: "Change Trainer",
-    className: "bg-success-soft text-success hover:enabled:bg-success-soft" },
-  history: { label: "History", icon: "clock", title: "View History",
-    className: "border-line bg-subtle text-secondary-grey hover:enabled:bg-hover" },
+const TAB_STATUS: Record<Tab, PTStatusFilter> = {
+  active: "ACTIVE",
+  completed: "COMPLETED",
+  expired: "EXPIRED",
+  all: "ALL",
+};
+const TAB_LABEL: Record<Tab, string> = {
+  active: "Active",
+  completed: "Completed",
+  expired: "Expired",
+  all: "All",
 };
 
-function PtActionButton({ kind, onClick, disabled, disabledTitle }: {
-  kind: RowAction; onClick: () => void; disabled?: boolean; disabledTitle?: string;
-}) {
-  const s = ACTION_STYLE[kind];
+const sortKey = (key: PTSortKey) => key;
+
+/** Sessions left as a compact bar: green, amber at 3 or fewer, red when used up. */
+function SessionsBar({ remaining, total }: { remaining: number; total: number }) {
+  const pct = total > 0 ? Math.min(100, Math.max(0, (remaining / total) * 100)) : 0;
+  const tone = remaining === 0 ? "bg-danger" : remaining <= 3 ? "bg-warning" : "bg-success";
   return (
-    <button type="button" onClick={onClick} disabled={disabled} title={disabled ? disabledTitle : s.title}
-      className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-transparent px-3 py-1.5 text-[13px] font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40",
-        s.className)}>
-      <Icon name={s.icon} className="h-4 w-4" />
-      {s.label}
-    </button>
+    <div className="flex min-w-0 flex-col gap-1" title={`${remaining} of ${total} sessions remaining`}>
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className={cn("font-bold", remaining === 0 ? "text-danger" : remaining <= 3 ? "text-warning" : "text-ink")}>
+          {remaining} left
+        </span>
+        <span className="text-muted">of {total}</span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-hover">
+        <div className={cn("h-full rounded-full transition-[width]", tone)} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
   );
 }
 
-function SessionBadge({ remaining, total }: { remaining: number; total: number }) {
-  return (
-    <span className={cn("inline-block rounded-full px-2.5 py-1 text-[13px] font-semibold",
-      remaining === 0 ? "bg-danger-soft text-danger"
-        : remaining <= 3 ? "bg-warning-soft text-warning"
-          : "bg-success-soft text-success")}>
-      {remaining} / {total}
-    </span>
-  );
-}
-
-/** Personal Training Dashboard — active PT clients, log session, history, change trainer. */
+/** Personal training — status tabs, search + trainer + paid-only filters, sortable list, log / history / trainer. */
 export function PersonalTrainingPage() {
   const branch = useBranchStore((s) => s.selectedBranchId);
   const canLog = useCan("pt:log");
   const canUpdate = useCan("pt:update");
+  const [tab, setTab] = useUrlEnum("tab", TABS, "active");
   const list = useListState();
-  const [status, setStatus] = useState<PTStatusFilter>("ACTIVE");
+  const [trainerId, setTrainerId] = useState("");
   const [paidOnly, setPaidOnly] = useState(true);
 
   const [logFor, setLogFor] = useState<PTSubscription | null>(null);
   const [historyFor, setHistoryFor] = useState<PTSubscription | null>(null);
   const [trainerFor, setTrainerFor] = useState<PTSubscription | null>(null);
 
-  const query = { ...list.query, status, paid_only: paidOnly };
+  const { setPage } = list;
+  // Tab / filter changes restart from page 1.
+  useEffect(() => setPage(1), [tab, trainerId, paidOnly, setPage]);
+
+  const trainers = useTrainerLookup();
+  const trainerOptions = (trainers.data ?? []).map((t) => ({ value: t.id, label: t.name }));
+
+  const query: PTListQuery = {
+    ...list.query, status: TAB_STATUS[tab], paid_only: paidOnly, trainer_id: trainerId || undefined,
+  };
   const pts = useQuery({
     queryKey: trainingKeys.list(branch, query),
     queryFn: async () => (await trainingApi.list(query)).data,
     placeholderData: keepPreviousData,
+  });
+  const counts = useQuery({
+    queryKey: trainingKeys.counts(branch, paidOnly),
+    queryFn: async () => (await trainingApi.counts(paidOnly)).data,
   });
 
   const today = todayISO();
 
   const columns = useMemo<ColumnDef<PTSubscription, unknown>[]>(() => [
     {
-      id: "member", header: "Member", meta: { width: "200px" },
+      id: "member", header: "Member", meta: { sortKey: sortKey("member_name") },
       cell: ({ row }) => (
-        <div className="flex flex-col">
-          <span className="font-bold text-ink">{row.original.member_name}</span>
-          <span className="text-xs font-medium text-muted">{row.original.registration_id} · {row.original.member_phone}</span>
+        <div className="min-w-0">
+          <div className="truncate font-semibold text-ink">{row.original.member_name}</div>
+          <div className="text-xs text-muted">{row.original.registration_id} · {row.original.member_phone}</div>
         </div>
       ),
     },
     {
-      id: "trainer", header: "Trainer", meta: { width: "160px" },
+      id: "trainer", header: "Trainer", meta: { width: "170px", sortKey: sortKey("trainer_name") },
       cell: ({ row }) => (
         <span className={cn(!row.original.trainer_id && "italic text-muted")}>{row.original.trainer_name}</span>
       ),
     },
     {
-      id: "plan", header: "Plan", meta: { width: "160px" },
-      cell: ({ row }) => (
-        <div className="flex flex-col items-start gap-1">
-          <span>{row.original.plan_name}</span>
-          {(row.original.status !== "ACTIVE" || !row.original.is_paid) && (
-            <div className="flex gap-1">
-              {row.original.status !== "ACTIVE" && <StatusBadge value={row.original.status} />}
-              {!row.original.is_paid && <StatusBadge value="PENDING" label="Unpaid" />}
-            </div>
-          )}
-        </div>
-      ),
-    },
-    { accessorKey: "total_sessions", header: "Total", meta: { width: "80px" } },
-    {
-      id: "remaining", header: "Remaining", meta: { width: "110px" },
-      cell: ({ row }) => <SessionBadge remaining={row.original.sessions_remaining} total={row.original.total_sessions} />,
+      id: "plan", header: "Plan", meta: { width: "180px" },
+      cell: ({ row }) => {
+        const pt = row.original;
+        return (
+          <div className="flex min-w-0 flex-col items-start gap-1">
+            <span className="truncate">{pt.plan_name}</span>
+            {(pt.status !== "ACTIVE" || !pt.is_paid) && (
+              <div className="flex gap-1">
+                {pt.status !== "ACTIVE" && <StatusBadge value={pt.status} />}
+                {!pt.is_paid && <StatusBadge value="PENDING" label="Unpaid" />}
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
-      id: "expiry", header: "Expiry", meta: { width: "120px" },
+      id: "sessions", header: "Sessions", meta: { width: "150px", sortKey: sortKey("sessions_remaining") },
+      cell: ({ row }) => <SessionsBar remaining={row.original.sessions_remaining} total={row.original.total_sessions} />,
+    },
+    {
+      id: "start", header: "Start", meta: { width: "115px", sortKey: sortKey("start_date") },
+      cell: ({ row }) => <span className="whitespace-nowrap">{formatDate(row.original.start_date)}</span>,
+    },
+    {
+      id: "expiry", header: "Expiry", meta: { width: "115px", sortKey: sortKey("expiry_date") },
       cell: ({ row }) => (
-        <span className={cn(row.original.expiry_date < today && "font-semibold text-accent")}>
+        <span className={cn("whitespace-nowrap font-semibold", row.original.expiry_date < today ? "text-danger" : "text-ink")}>
           {formatDate(row.original.expiry_date)}
         </span>
       ),
     },
     {
-      id: "actions", header: "Actions", meta: { width: "280px" },
+      id: "actions", header: "", meta: { width: "250px" },
       cell: ({ row }) => {
         const pt = row.original;
         const loggable = pt.status === "ACTIVE" && pt.is_paid && pt.sessions_remaining > 0;
         return (
-          <div className="flex justify-end gap-2">
+          <ActionGroup>
             {canLog && (
-              <PtActionButton kind="log" onClick={() => setLogFor(pt)} disabled={!loggable}
-                disabledTitle={!pt.is_paid ? "PT subscription is not paid yet" : "PT subscription is not active"} />
+              <button type="button" disabled={!loggable} onClick={() => setLogFor(pt)}
+                className="btn-status-action btn-red disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line-accent disabled:hover:bg-none disabled:hover:text-accent disabled:hover:shadow-none"
+                title={loggable ? "Log a session"
+                  : !pt.is_paid ? "PT subscription is not paid yet"
+                    : pt.sessions_remaining === 0 ? "No sessions remaining" : "PT subscription is not active"}>
+                Log session
+              </button>
             )}
-            {canUpdate && <PtActionButton kind="trainer" onClick={() => setTrainerFor(pt)} />}
-            <PtActionButton kind="history" onClick={() => setHistoryFor(pt)} />
-          </div>
+            {canUpdate && (
+              <button type="button" className="btn-status-action btn-grey" onClick={() => setTrainerFor(pt)}>
+                Trainer
+              </button>
+            )}
+            <button type="button" className="action-icon view" title="Session history" aria-label="Session history"
+              onClick={() => setHistoryFor(pt)}>
+              <Icon name="clock" className="h-4 w-4" />
+            </button>
+          </ActionGroup>
         );
       },
     },
   ], [canLog, canUpdate, today]);
 
-  const filterSelect = "h-[42px] rounded-[10px] border border-line bg-subtle px-3 text-sm font-semibold text-ink outline-none transition-all focus:border-accent focus:bg-surface";
+  const active: ActiveFilter[] = [];
+  if (trainerId) {
+    active.push({ label: `Trainer: ${trainerOptions.find((t) => t.value === trainerId)?.label ?? "…"}`,
+      onRemove: () => setTrainerId("") });
+  }
+  if (!paidOnly) active.push({ label: "Including unpaid", onRemove: () => setPaidOnly(true) });
+
+  const data = pts.data;
+  const filtered = !!list.debouncedSearch || !!trainerId;
 
   return (
-    <div className="mx-auto w-full">
-      <PageHeader
-        title="Personal Training Dashboard"
-        subtitle="Manage active personal training sessions and logs"
-        showBack={false}
-        search={{ value: list.search, onChange: list.setSearch, placeholder: "Search members or trainers..." }}
-        actions={
+    <div>
+      <PageHeader title="Personal training" subtitle="PT clients, session logs and trainer assignments" />
+
+      <DataTable
+        columns={columns}
+        data={data?.items ?? []}
+        loading={pts.isLoading}
+        fetching={pts.isFetching}
+        getRowId={(r) => r.id}
+        onRowClick={(r) => setHistoryFor(r)}
+        rowClassName={(r) => (r.status !== "ACTIVE" ? ROW_MARKER.muted : r.expiry_date < today ? ROW_MARKER.expired : undefined)}
+        emptyIcon="dumbbell"
+        emptyMessage={filtered ? "No PT clients match these filters"
+          : tab === "active" ? "No active PT clients" : "No PT clients found"}
+        emptyHint={filtered ? "Try a different search or clear the filters."
+          : "Personal training starts when a member is enrolled on a PT add-on."}
+        sorting={list.sorting}
+        pagination={paginationProps(list, data?.total)}
+        toolbar={
           <>
-            <select aria-label="Status filter" className={filterSelect} value={status}
-              onChange={(e) => { setStatus(e.target.value as PTStatusFilter); list.setPage(1); }}>
-              {STATUS_FILTERS.map((s) => (
-                <option key={s} value={s}>{s === "ALL" ? "All Statuses" : s.charAt(0) + s.slice(1).toLowerCase()}</option>
-              ))}
-            </select>
-            <div className="flex h-[42px] items-center rounded-[10px] border border-line bg-surface px-3">
-              <Checkbox checked={paidOnly} onChange={(v) => { setPaidOnly(v); list.setPage(1); }} label="Paid only" />
-            </div>
-            <Button variant="secondary" icon={<Icon name="refresh" className="h-4 w-4" />}
-              loading={pts.isFetching && !pts.isLoading} onClick={() => void pts.refetch()}>
-              Refresh
-            </Button>
+            <FilterTabs value={tab} onChange={setTab}
+              tabs={TABS.map((t) => ({ value: t, label: TAB_LABEL[t], count: counts.data?.[t] }))} />
+            <ListToolbar
+              search={{ value: list.search, onChange: list.setSearch, placeholder: "Search member or trainer" }}
+              filters={
+                <>
+                  <FilterSelect placeholder="All trainers" ariaLabel="Trainer" value={trainerId} onChange={setTrainerId}
+                    options={trainerOptions} />
+                  <div className="toolbar-control flex items-center">
+                    <Checkbox checked={paidOnly} onChange={setPaidOnly} label="Paid only" />
+                  </div>
+                </>
+              }
+              actions={
+                <Button variant="secondary" icon={<Icon name="refresh" className="h-4 w-4" />}
+                  loading={pts.isFetching && !pts.isLoading} onClick={() => void pts.refetch()}>
+                  Refresh
+                </Button>
+              }
+              active={active}
+            />
           </>
         }
       />
 
-      <DataTable
-        columns={columns}
-        data={pts.data?.items ?? []}
-        loading={pts.isLoading}
-        emptyMessage={status === "ACTIVE" ? "No active PT members found." : "No PT members found."}
-        getRowId={(r) => r.id}
-        rowClassName={(r) => (r.status !== "ACTIVE" ? ROW_MARKER.muted : r.expiry_date < today ? ROW_MARKER.expired : undefined)}
-        pagination={{
-          page: list.page,
-          pageSize: list.pageSize,
-          total: pts.data?.total ?? 0,
-          onPageChange: list.setPage,
-          onPageSizeChange: list.setPageSize,
-        }}
-      />
-
-      <LogSessionModal pt={logFor} onClose={() => setLogFor(null)} />
-      <SessionHistoryModal pt={historyFor} onClose={() => setHistoryFor(null)} />
-      <ChangeTrainerModal pt={trainerFor} onClose={() => setTrainerFor(null)} />
+      {logFor && <LogSessionDrawer pt={logFor} onClose={() => setLogFor(null)} />}
+      {historyFor && <SessionHistoryDrawer pt={historyFor} onClose={() => setHistoryFor(null)} />}
+      {trainerFor && <ChangeTrainerModal pt={trainerFor} onClose={() => setTrainerFor(null)} />}
     </div>
   );
 }

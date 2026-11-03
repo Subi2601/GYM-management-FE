@@ -1,3 +1,4 @@
+import type { SortDir } from "@/hooks/use-list-state";
 import type { PaymentMode, PaymentStatus, PlanServiceType, PlanType, RenewalState } from "@/types/enums";
 
 export type SubscriptionStatus = "ACTIVE" | "EXPIRED";
@@ -70,9 +71,15 @@ export interface SubscriptionDetail extends SubscriptionRow {
   pt_subscription_id: string | null;
 }
 
+/** `sort_by` values accepted by GET /subscriptions. */
+export type SubscriptionSortKey = "member_name" | "plan_name" | "start_date" | "end_date" | "created_at";
+
 export interface SubscriptionListQuery {
   page: number;
   page_size: number;
   search?: string;
   renewal_state?: RenewalState;
+  plan_id?: string;
+  sort_by?: string;
+  sort_dir?: SortDir;
 }

@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -7,12 +7,15 @@ import { z } from "zod";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
-import { leadApi, leadKeys } from "@/features/leads/api";
+import { GRID_2 } from "@/components/ui/Section";
+import { leadApi, useInvalidateLeads } from "@/features/leads/api";
 import { addDaysISO, todayISO } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { humanize } from "@/lib/utils";
 import { LEAD_STATUSES } from "@/types/enums";
 import type { Lead } from "@/types/lead";
+
+const FORM_ID = "lead-follow-up-form";
 
 // LeadFollowUp: notes 1..1000; the original form also required the next follow-up date.
 const schema = z.object({
@@ -31,9 +34,9 @@ function defaults(lead: Lead | null): FormValues {
   };
 }
 
-/** "Add Follow-up for {name}" → POST /leads/{id}/follow-up (appends a dated note). */
+/** "Add follow-up" → POST /leads/{id}/follow-up (appends a dated note). */
 export function FollowUpModal({ lead, onClose }: { lead: Lead | null; onClose: () => void }) {
-  const qc = useQueryClient();
+  const invalidate = useInvalidateLeads();
   const { register, handleSubmit, reset, formState: { errors, isValid } } =
     useForm<FormValues>({ resolver: zodResolver(schema), mode: "onChange", defaultValues: defaults(lead) });
 
@@ -46,33 +49,38 @@ export function FollowUpModal({ lead, onClose }: { lead: Lead | null; onClose: (
     onSuccess: async (res) => {
       notify.success(res.message);
       onClose();
-      await qc.invalidateQueries({ queryKey: leadKeys.all });
-      await qc.invalidateQueries({ queryKey: ["dashboard"] });
+      await invalidate();
     },
     onError: notify.error,
   });
 
   return (
-    <Modal open={lead !== null} title={`Add Follow-up for ${lead?.name ?? ""}`} onClose={onClose} width="560px">
-      <form onSubmit={handleSubmit((v) => save.mutate(v))} className="py-2.5" noValidate>
-        <div className="grid grid-cols-1 gap-5">
+    <Modal
+      open={lead !== null}
+      title="Add follow-up"
+      subtitle={lead ? `${lead.name} · ${lead.phone}` : undefined}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" form={FORM_ID} disabled={!isValid} loading={save.isPending}>Save follow-up</Button>
+        </>
+      }
+    >
+      <form id={FORM_ID} onSubmit={handleSubmit((v) => save.mutate(v))} noValidate>
+        <div className={GRID_2}>
           <Field label="Status" htmlFor="fu-status" error={errors.status?.message} required>
             <Select id="fu-status" invalid={!!errors.status} {...register("status")}>
               {LEAD_STATUSES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
             </Select>
           </Field>
-          <Field label="Next Follow-up Date" htmlFor="fu-date" error={errors.next_follow_up_date?.message} required>
+          <Field label="Next follow-up" htmlFor="fu-date" error={errors.next_follow_up_date?.message} required>
             <Input id="fu-date" type="date" invalid={!!errors.next_follow_up_date} {...register("next_follow_up_date")} />
           </Field>
-          <Field label="Follow-up Notes" htmlFor="fu-notes" error={errors.notes?.message} required>
-            <Textarea id="fu-notes" rows={4} placeholder="Enter follow-up comments..."
+          <Field label="Follow-up notes" htmlFor="fu-notes" error={errors.notes?.message} required className="md:col-span-2">
+            <Textarea id="fu-notes" rows={4} placeholder="What was discussed? Any objections or next steps…"
               invalid={!!errors.notes} {...register("notes")} />
           </Field>
-        </div>
-
-        <div className="form-actions-modern mt-6">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={!isValid} loading={save.isPending}>Save Follow-up</Button>
         </div>
       </form>
     </Modal>

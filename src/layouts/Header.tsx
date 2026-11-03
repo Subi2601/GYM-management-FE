@@ -4,16 +4,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Icon } from "@/components/ui/Icon";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { screenLabel } from "@/layouts/nav-config";
-import { cn } from "@/lib/utils";
+import { cn, humanize, initials } from "@/lib/utils";
 import { signOut } from "@/providers/AuthProvider";
 import { useAuthStore } from "@/stores/auth-store";
-
-const ROLE_LABEL: Record<string, string> = { OWNER: "Owner", ADMIN: "Admin", TRAINER: "Trainer" };
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? parts[0]?.[1] ?? "")).toUpperCase() || "?";
-}
 
 /** Sticky glass app bar: hamburger (mobile), current screen, theme toggle, profile menu with sign out. */
 export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
@@ -39,7 +32,8 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   }, [menuOpen]);
 
   if (!me) return null;
-  const isOwnerish = me.user.role === "OWNER" || me.user.role === "ADMIN";
+  // Accounts that manage several branches get the accent badge — capability, not role name.
+  const isManager = me.can_switch_branch;
 
   const logout = async () => {
     setMenuOpen(false);
@@ -89,8 +83,8 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
               </div>
               <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
                 <span className={cn("rounded-md px-2 py-0.5 text-[11px] font-bold",
-                  isOwnerish ? "bg-accent-light text-accent" : "bg-hover text-secondary-grey")}>
-                  {ROLE_LABEL[me.user.role] ?? me.user.role}
+                  isManager ? "bg-accent-light text-accent" : "bg-hover text-secondary-grey")}>
+                  {humanize(me.user.role)}
                 </span>
                 {me.user.organization_name && (
                   <span className="truncate text-xs font-semibold text-secondary-grey">{me.user.organization_name}</span>

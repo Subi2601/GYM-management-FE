@@ -10,6 +10,19 @@ export const ACTIVITY_LEVELS = [
 ] as const;
 export type ActivityLevel = (typeof ACTIVITY_LEVELS)[number]["value"];
 
+/** Server sort keys of GET /diet-plans/eligible-members (`sort_by`); plan_tier sorts BASIC < STANDARD < PREMIUM. */
+export type EligibleSortKey = "name" | "registration_id" | "phone" | "plan_tier" | "last_modified_date";
+
+export interface EligibleListQuery {
+  page: number;
+  page_size: number;
+  search?: string;
+  sort_by?: string;
+  sort_dir?: "asc" | "desc";
+  /** undefined = any plan status. */
+  has_plan?: boolean;
+}
+
 /** GET /diet-plans/eligible-members — EligibleMemberResponse */
 export interface EligibleMember {
   member_id: string;

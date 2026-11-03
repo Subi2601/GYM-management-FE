@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { goalField } from "@/features/lookups/fitness-goals";
 import { todayISO } from "@/lib/format";
 import { GENDERS } from "@/types/enums";
 import type { Member, MemberInput } from "@/types/member";
@@ -18,7 +19,7 @@ export const memberProfileSchema = z.object({
   address: z.string().trim().max(300),
   weight: optionalMeasure(400),
   height: optionalMeasure(300),
-  fitness_goal: z.string().trim().max(200),
+  fitness_goal: goalField,  // optional: "" = not set
   emergency_contact_name: z.string().trim().max(120),
   emergency_contact_phone: z.string().trim().refine((v) => v === "" || /^\d{10}$/.test(v), "Enter a valid 10-digit mobile number"),
   joining_date: z.string().min(1, "Joining date is required"),
@@ -65,7 +66,7 @@ export function toMemberBody(v: MemberProfileValues, includeIdProofNumber: boole
     address: textOrNull(v.address),
     weight: numberOrNull(v.weight),
     height: numberOrNull(v.height),
-    fitness_goal: textOrNull(v.fitness_goal),
+    fitness_goal: v.fitness_goal || null,
     emergency_contact_name: textOrNull(v.emergency_contact_name),
     emergency_contact_phone: textOrNull(v.emergency_contact_phone),
     joining_date: v.joining_date,

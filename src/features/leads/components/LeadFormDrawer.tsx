@@ -1,24 +1,28 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
-import { Modal } from "@/components/ui/Modal";
-import { leadApi, leadKeys } from "@/features/leads/api";
+import { Drawer } from "@/components/ui/Modal";
+import { FormDivider, GRID_2 } from "@/components/ui/Section";
+import { leadApi, useInvalidateLeads } from "@/features/leads/api";
+import { FitnessGoalSelect, requiredGoalField } from "@/features/lookups/fitness-goals";
 import { notify } from "@/lib/notify";
 import { humanize } from "@/lib/utils";
 import { LEAD_STATUSES } from "@/types/enums";
 import type { Lead, LeadInput } from "@/types/lead";
+
+const FORM_ID = "lead-form";
 
 // Mirrors LeadCreate / the original form: everything required except notes; phone 10 digits.
 const schema = z.object({
   name: z.string().trim().min(1, "Full name is required").max(120, "Max 120 characters"),
   phone: z.string().trim().regex(/^\d{10}$/, "Enter a valid 10-digit mobile number"),
   location: z.string().trim().min(1, "Location is required").max(150, "Max 150 characters"),
-  goal: z.string().trim().min(1, "Goal is required").max(150, "Max 150 characters"),
+  goal: requiredGoalField("Select the client's goal"),
   status: z.enum(LEAD_STATUSES),
   plan_to_join_date: z.string().min(1, "Plan to join date is required"),
   next_follow_up_date: z.string().min(1, "Next follow-up date is required"),
@@ -51,11 +55,11 @@ interface Props {
   onClose: () => void;
 }
 
-/** "Add New Lead" / "Edit Lead" modal. */
-export function LeadFormModal({ open, lead, onClose }: Props) {
-  const qc = useQueryClient();
+/** Add / edit lead slide-over: contact, interest and notes. */
+export function LeadFormDrawer({ open, lead, onClose }: Props) {
+  const invalidate = useInvalidateLeads();
   const isEdit = lead !== null;
-  const { register, handleSubmit, reset, formState: { errors, isValid } } =
+  const { register, control, handleSubmit, reset, formState: { errors, isValid } } =
     useForm<FormValues>({ resolver: zodResolver(schema), mode: "onChange", defaultValues: EMPTY });
 
   useEffect(() => {
@@ -68,8 +72,7 @@ export function LeadFormModal({ open, lead, onClose }: Props) {
       notify.success(res.message);
       reset(EMPTY);
       onClose();
-      await qc.invalidateQueries({ queryKey: leadKeys.all });
-      await qc.invalidateQueries({ queryKey: ["dashboard"] });
+      await invalidate();
     },
     onError: notify.error,
   });
@@ -79,50 +82,69 @@ export function LeadFormModal({ open, lead, onClose }: Props) {
     onClose();
   };
 
-  const onSubmit = (v: FormValues) => save.mutate({ ...v, notes: v.notes.trim() || null });
+  const onSubmit = (v: FormValues) => {
+    if (!v.goal) return; // the schema already requires it; this narrows the type
+    save.mutate({ ...v, goal: v.goal, notes: v.notes.trim() || null });
+  };
 
   return (
-    <Modal open={open} title={isEdit ? "Edit Lead" : "Add New Lead"} onClose={close}>
-      <form onSubmit={handleSubmit(onSubmit)} className="py-2.5" noValidate>
-        <div className="form-grid-modern">
-          <Field label="Full Name" htmlFor="lead-name" error={errors.name?.message} required>
+    <Drawer
+      open={open}
+      title={isEdit ? "Edit lead" : "Add lead"}
+      subtitle={isEdit ? `${lead.name} · ${lead.phone}` : "Capture an enquiry and schedule the first follow-up"}
+      onClose={close}
+      footer={
+        <>
+          <Button variant="secondary" onClick={close}>Cancel</Button>
+          <Button type="submit" form={FORM_ID} disabled={!isValid} loading={save.isPending}>
+            {isEdit ? "Update lead" : "Save lead"}
+          </Button>
+        </>
+      }
+    >
+      <form id={FORM_ID} onSubmit={handleSubmit(onSubmit)} noValidate>
+        <FormDivider>Contact</FormDivider>
+        <div className={GRID_2}>
+          <Field label="Full name" htmlFor="lead-name" error={errors.name?.message} required className="md:col-span-2">
             <Input id="lead-name" placeholder="Enter full name" invalid={!!errors.name} {...register("name")} />
           </Field>
-          <Field label="Phone Number" htmlFor="lead-phone" error={errors.phone?.message} required>
+          <Field label="Phone number" htmlFor="lead-phone" error={errors.phone?.message} required>
             <Input id="lead-phone" inputMode="numeric" maxLength={10} placeholder="10-digit mobile number"
               invalid={!!errors.phone} {...register("phone")} />
           </Field>
           <Field label="Location" htmlFor="lead-location" error={errors.location?.message} required>
             <Input id="lead-location" placeholder="Enter location" invalid={!!errors.location} {...register("location")} />
           </Field>
+        </div>
+
+        <FormDivider>Interest &amp; follow-up</FormDivider>
+        <div className={GRID_2}>
           <Field label="Goal" htmlFor="lead-goal" error={errors.goal?.message} required>
-            <Input id="lead-goal" placeholder="e.g. Fat Loss, Muscle Building" invalid={!!errors.goal} {...register("goal")} />
+            <Controller name="goal" control={control} render={({ field }) => (
+              <FitnessGoalSelect id="lead-goal" value={field.value} onChange={field.onChange} onBlur={field.onBlur}
+                invalid={!!errors.goal} />
+            )} />
           </Field>
           <Field label="Status" htmlFor="lead-status" error={errors.status?.message} required>
             <Select id="lead-status" invalid={!!errors.status} {...register("status")}>
               {LEAD_STATUSES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
             </Select>
           </Field>
-          <Field label="Plan to Join Date" htmlFor="lead-ptj" error={errors.plan_to_join_date?.message} required>
+          <Field label="Plan to join" htmlFor="lead-ptj" error={errors.plan_to_join_date?.message} required>
             <Input id="lead-ptj" type="date" invalid={!!errors.plan_to_join_date} {...register("plan_to_join_date")} />
           </Field>
-          <Field label="Next Follow-up Date" htmlFor="lead-nfu" error={errors.next_follow_up_date?.message} required>
+          <Field label="Next follow-up" htmlFor="lead-nfu" error={errors.next_follow_up_date?.message} required>
             <Input id="lead-nfu" type="date" invalid={!!errors.next_follow_up_date} {...register("next_follow_up_date")} />
           </Field>
         </div>
 
-        <Field label="Notes / History" htmlFor="lead-notes" error={errors.notes?.message} className="mt-4">
-          <Textarea id="lead-notes" rows={4} placeholder="Enter notes or follow-up history"
+        <FormDivider>Notes</FormDivider>
+        <Field label="Notes / history" htmlFor="lead-notes" error={errors.notes?.message}
+          hint={isEdit ? "Follow-ups are appended here as dated entries" : undefined}>
+          <Textarea id="lead-notes" rows={5} placeholder="Enter notes or follow-up history"
             invalid={!!errors.notes} {...register("notes")} />
         </Field>
-
-        <div className="form-actions-modern mt-6">
-          <Button variant="secondary" onClick={close}>Cancel</Button>
-          <Button type="submit" disabled={!isValid} loading={save.isPending}>
-            {isEdit ? "Update Lead" : "Save Lead"}
-          </Button>
-        </div>
       </form>
-    </Modal>
+    </Drawer>
   );
 }

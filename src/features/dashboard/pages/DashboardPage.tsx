@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { StatCard } from "@/components/ui/StatCard";
 import { GrowthChart } from "@/features/dashboard/components/GrowthChart";
 import { useDashboardSummary } from "@/features/dashboard/api";
 import { formatINR } from "@/lib/format";
@@ -9,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { useAuthStore, useCan } from "@/stores/auth-store";
 import { useBranchStore } from "@/stores/branch-store";
 
-/** Dashboard: welcome hero, 4 KPI cards, quick navigation, 6-month growth chart (now real data). */
+/** Dashboard: welcome hero, 4 KPI tiles (shared StatCard), quick navigation, 6-month growth chart (now real data). */
 export function DashboardPage() {
   const me = useAuthStore((s) => s.me);
   const branchId = useBranchStore((s) => s.selectedBranchId);
@@ -32,8 +33,8 @@ export function DashboardPage() {
             Hello, {me?.user.name || "Admin"}. Here&apos;s what&apos;s happening at your gym today.
           </p>
           <div className="flex flex-wrap gap-3">
-            <HeroBadge pulse>System Online</HeroBadge>
-            <HeroBadge>{branchName ?? "All Branches Active"}</HeroBadge>
+            <HeroBadge pulse>System online</HeroBadge>
+            <HeroBadge>{branchName ?? "All branches active"}</HeroBadge>
           </div>
         </div>
         <div className="hero-watermark pointer-events-none absolute right-10 select-none font-display text-[150px] font-bold leading-[.8] tracking-[2px] max-md:hidden" aria-hidden="true">
@@ -47,7 +48,7 @@ export function DashboardPage() {
         <button type="button" onClick={() => summary.refetch()} disabled={busy}
           className="flex items-center gap-2 rounded-lg border-none bg-transparent px-3 py-2 text-sm font-bold text-muted transition-all hover:enabled:bg-hover hover:enabled:text-ink disabled:cursor-not-allowed disabled:opacity-50">
           <Icon name="refresh" strokeWidth={2.5} className={cn(busy && "animate-spin")} />
-          Refresh Data
+          Refresh data
         </button>
       </div>
 
@@ -58,14 +59,15 @@ export function DashboardPage() {
       )}
 
       {/* KPI cards */}
-      <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon="users" label="Total Members" value={s?.total_members} trend="Lifetime Records" />
-        <StatCard icon="trending" label="Active Members" value={s?.active_members} trend="Current Subscriptions"
-          positive highlight="red" />
-        <StatCard icon="money" label="Total Revenue" value={s ? formatINR(s.total_revenue, true) : undefined}
-          trend="Cumulative Earnings" />
-        <StatCard icon="clock" label="Today's Collection" value={s ? formatINR(s.today_revenue, true) : undefined}
-          trend="Recorded Today" positive highlight="grey" />
+      <div className={cn("mt-5 grid grid-cols-1 gap-5 transition-opacity sm:grid-cols-2 xl:grid-cols-4",
+        summary.isLoading && "animate-pulse")}>
+        <StatCard icon="users" tone="neutral" label="Total members" value={s?.total_members} hint="Lifetime records" />
+        <StatCard icon="trending" tone="accent" label="Active members" value={s?.active_members}
+          hint="Current subscriptions" className="border-b-[3px] border-b-accent" />
+        <StatCard icon="money" tone="info" label="Total revenue" value={s ? formatINR(s.total_revenue, true) : undefined}
+          hint="Cumulative earnings" />
+        <StatCard icon="wallet" tone="success" label="Today's collection"
+          value={s ? formatINR(s.today_revenue, true) : undefined} hint="Recorded today" />
       </div>
 
       <QuickNav expiring={s?.expiring_this_week} openLeads={s?.open_leads} />
@@ -74,9 +76,9 @@ export function DashboardPage() {
       <div className="standard-card mt-10 rounded-3xl p-8">
         <div className="mb-8 flex flex-wrap items-start justify-between gap-6 max-md:flex-col max-md:gap-4">
           <div className="flex flex-col items-start">
-            <h2 className="m-0 mb-2 text-[22px] font-extrabold leading-[1.2] tracking-[-0.02em] text-ink">Growth Analysis</h2>
+            <h2 className="m-0 mb-2 text-[22px] font-extrabold leading-[1.2] tracking-[-0.02em] text-ink">Growth analysis</h2>
             <p className="m-0 mb-4 text-sm font-medium text-muted">
-              Member registrations and revenue (Last 6 Months)
+              Member registrations and revenue (last 6 months)
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -110,38 +112,6 @@ function HeroBadge({ pulse = false, children }: { pulse?: boolean; children: Rea
   );
 }
 
-interface StatCardProps {
-  icon: IconName;
-  label: string;
-  value: ReactNode | undefined;
-  trend: string;
-  positive?: boolean;
-  highlight?: "red" | "grey";
-}
-
-/** ".stat-card-standard" */
-function StatCard({ icon, label, value, trend, positive = false, highlight }: StatCardProps) {
-  return (
-    <div className={cn(
-      "group relative overflow-hidden rounded-2xl border border-line bg-surface p-6 shadow-premium",
-      "bg-[linear-gradient(160deg,var(--card-tint),transparent_55%)] card-hover",
-      highlight === "red" && "border-b-[3px] border-b-accent",
-      highlight === "grey" && "border-b-[3px] border-b-secondary-grey",
-    )}>
-      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-accent-light text-accent transition-all duration-[250ms] group-hover:bg-grad group-hover:text-white">
-        <Icon name={icon} className="h-5 w-5" />
-      </div>
-      <div className="mb-1.5 text-[13px] font-semibold text-muted">{label}</div>
-      <div className="mb-1 font-display text-[44px] font-bold leading-none tracking-[0.3px] text-ink tabular-nums max-md:text-[36px]">
-        {value ?? <span className="inline-block h-10 w-24 animate-pulse rounded-lg bg-hover align-middle" />}
-      </div>
-      <div className={cn("flex items-center gap-1.5 text-[13px] font-bold", positive ? "text-success" : "text-secondary-grey")}>
-        {trend}
-      </div>
-    </div>
-  );
-}
-
 interface NavCard {
   key: string;
   icon: IconName;
@@ -168,13 +138,13 @@ function QuickNav({ expiring, openLeads }: { expiring: number | undefined; openL
     payments: useCan("payment:list"),
   };
   const cards: (NavCard & { allowed: boolean })[] = [
-    { key: "expiring", icon: "alert", title: "Expiring This Week", hint: "Memberships ending in 7 days",
-      to: "/members?filter=expiring", count: expiring, tone: "amber", allowed: can.members },
-    { key: "leads", icon: "userCheck", title: "Open Leads", hint: "New & follow-up enquiries",
-      to: "/leads?filter=followup", count: openLeads, tone: "red", allowed: can.leads },
-    { key: "add", icon: "plus", title: "Add Member", hint: "Register a new member",
-      to: "/members?action=add", tone: "grey", allowed: can.addMember },
-    { key: "accounts", icon: "money", title: "Accounts & Finance", hint: "Collections & receipts",
+    { key: "expiring", icon: "alert", title: "Expiring this week", hint: "Memberships ending in 7 days",
+      to: "/members?tab=expiring", count: expiring, tone: "amber", allowed: can.members },
+    { key: "leads", icon: "userCheck", title: "Open leads", hint: "New & follow-up enquiries",
+      to: "/leads?tab=followup", count: openLeads, tone: "red", allowed: can.leads },
+    { key: "add", icon: "plus", title: "Add member", hint: "Register a new member",
+      to: "/members/new", tone: "grey", allowed: can.addMember },
+    { key: "accounts", icon: "money", title: "Accounts & finance", hint: "Collections & receipts",
       to: "/payments", tone: "grey", allowed: can.payments },
   ];
   const visible = cards.filter((c) => c.allowed);
