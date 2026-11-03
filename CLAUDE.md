@@ -71,6 +71,9 @@ src/
   Forms: sentence-case labels via `.form-label`, white `.form-control` inputs, placeholders like
   "Select a trainer" (not "-- Select --").
 - Tailwind config / font changes need a dev-server restart to show.
+- **Attendance**: `/attendance` has Staff | Members views (`?view=`), `/attendance/qr` the branch posters, gym
+  location and linked phones (`attendance:qr`). `/checkin/:token?type=in|out` is the public, phone-sized scan page
+  (outside `RequireAuth`) — it talks only to `checkinApi` (`/public/checkin/...`). QR images come from `qrcode`.
 - Invoices open in a new tab: `window.open(\`/invoice/${paymentId}\`, "_blank")`.
 
 ## Commands

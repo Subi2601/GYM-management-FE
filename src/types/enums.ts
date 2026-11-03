@@ -43,6 +43,10 @@ export type EmployeeStatus = (typeof EMPLOYEE_STATUSES)[number];
 export const ATTENDANCE_STATUSES = ["PRESENT", "ABSENT", "LATE", "HALF_DAY", "ON_LEAVE"] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 
+export type AttendancePersonType = "STAFF" | "MEMBER";
+/** MANUAL = front desk, QR = the person scanned the branch poster. */
+export type AttendanceSource = "MANUAL" | "QR";
+
 export type SalaryStatus = "PENDING" | "PAID";
 
 export const DIET_TIERS = ["BASIC", "STANDARD", "PREMIUM"] as const;

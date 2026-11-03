@@ -34,6 +34,8 @@ const StaffPage = page(() => import("@/features/staff/pages/StaffPage"), "StaffP
 const EmployeeFormPage = page(() => import("@/features/staff/pages/EmployeeFormPage"), "EmployeeFormPage");
 const EmployeeDetailsPage = page(() => import("@/features/staff/pages/EmployeeDetailsPage"), "EmployeeDetailsPage");
 const AttendancePage = page(() => import("@/features/attendance/pages/AttendancePage"), "AttendancePage");
+const AttendanceQrPage = page(() => import("@/features/attendance/pages/AttendanceQrPage"), "AttendanceQrPage");
+const CheckinPage = page(() => import("@/features/attendance/pages/CheckinPage"), "CheckinPage");
 const SalaryPage = page(() => import("@/features/salary/pages/SalaryPage"), "SalaryPage");
 const DietPlansPage = page(() => import("@/features/diet/pages/DietPlansPage"), "DietPlansPage");
 const DietBuilderPage = page(() => import("@/features/diet/pages/DietBuilderPage"), "DietBuilderPage");
@@ -71,6 +73,8 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/session-expired" element={<SessionExpiredPage />} />
+              {/* Opened from the branch QR posters on members' / staff phones — no login. */}
+              <Route path="/checkin/:token" element={<Suspense fallback={<PageLoader />}><CheckinPage /></Suspense>} />
               <Route path="/branch-selection" element={<RequireAuth><BranchSelectionPage /></RequireAuth>} />
               {/* Invoice prints full-width without the app chrome, as before. */}
               <Route path="/invoice/:paymentId" element={
@@ -93,6 +97,7 @@ export default function App() {
                 <Route path="staff/:id" element={<Guarded permission="employee:list"><EmployeeDetailsPage /></Guarded>} />
                 <Route path="staff/:id/edit" element={<Guarded permission="employee:update"><EmployeeFormPage /></Guarded>} />
                 <Route path="attendance" element={<Guarded permission="attendance:list"><AttendancePage /></Guarded>} />
+                <Route path="attendance/qr" element={<Guarded permission="attendance:qr"><AttendanceQrPage /></Guarded>} />
                 <Route path="salary" element={<Guarded permission="salary:list"><SalaryPage /></Guarded>} />
                 <Route path="diet-plans" element={<Guarded permission="diet:list"><DietPlansPage /></Guarded>} />
                 <Route path="diet-plans/:memberId" element={<Guarded permission="diet:manage"><DietBuilderPage /></Guarded>} />
