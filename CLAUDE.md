@@ -62,7 +62,7 @@ src/
   Server pagination + sorting via `useListState` → `pagination={paginationProps(list, total)}` and
   `sorting={list.sorting}`; a column is sortable when `meta.sortKey` is set (the API's `sort_by` value).
   Status values via `<StatusBadge>`, money via `formatINR` (right-aligned), dates via `formatDate` (DD-MM-YYYY).
-  The actions column has `id: "actions"`, an empty header, and is last.
+  The actions column has `id: "actions"`, the header "Actions", and is last.
 - **Sidebar**: one link per screen (no sub-menus, no "Add …" links). Add a screen to `NAV` in `nav-config.ts`.
 - **Destructive actions** ask first: `if (await confirm("…")) mutate()`.
 - **Styling**: Tailwind utilities with the Stag tokens from `tailwind.config.ts` (`text-ink`, `text-muted`,

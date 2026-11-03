@@ -104,7 +104,7 @@ export function DataTable<T>({ columns, data, loading = false, fetching = false,
                       className={cn(
                         "h-11 select-none whitespace-nowrap border-b border-line bg-subtle px-4 first:pl-6 last:pr-6",
                         "text-[11.5px] font-bold uppercase tracking-[0.06em] text-muted",
-                        isActions && "sticky right-0 text-right",
+                        isActions && "sticky right-0 text-center",
                         alignClass(meta?.align),
                       )}
                     >
@@ -160,7 +160,7 @@ export function DataTable<T>({ columns, data, loading = false, fetching = false,
                           "border-b border-line-light bg-surface px-4 py-3 text-sm text-ink transition-colors first:pl-6 last:pr-6",
                           // opaque wash (sticky cells sit over scrolled content)
                           "group-hover:[background:linear-gradient(var(--row-hover),var(--row-hover)),rgb(var(--surface))]",
-                          isActions && "sticky right-0 text-right",
+                          isActions && "sticky right-0 text-center",
                           alignClass(cell.column.columnDef.meta?.align),
                         )}
                       >
@@ -269,6 +269,7 @@ export function ActionIcon({ kind, title, onClick }: ActionButtonProps) {
   );
 }
 
+/** Buttons of one row, centred under the "Actions" heading. */
 export function ActionGroup({ children }: { children: ReactNode }) {
-  return <div className="flex items-center justify-end gap-1.5">{children}</div>;
+  return <div className="flex items-center justify-center gap-1.5">{children}</div>;
 }

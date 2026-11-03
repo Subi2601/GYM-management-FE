@@ -105,7 +105,7 @@ export function AttendancePage() {
     { accessorKey: "check_out_time", header: "Out", meta: { width: "90px", sortKey: "check_out_time" },
       cell: ({ row }) => formatTime(row.original.check_out_time) },
     {
-      id: "actions", header: "", meta: { width: "160px" },
+      id: "actions", header: "Actions", meta: { width: "160px" },
       cell: ({ row }) => {
         const r = row.original;
         const canCheckout = writable && isToday && !!r.check_in_time && !r.check_out_time;

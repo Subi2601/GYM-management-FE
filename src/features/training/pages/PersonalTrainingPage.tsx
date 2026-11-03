@@ -144,7 +144,7 @@ export function PersonalTrainingPage() {
       ),
     },
     {
-      id: "actions", header: "", meta: { width: "250px" },
+      id: "actions", header: "Actions", meta: { width: "250px" },
       cell: ({ row }) => {
         const pt = row.original;
         const loggable = pt.status === "ACTIVE" && pt.is_paid && pt.sessions_remaining > 0;

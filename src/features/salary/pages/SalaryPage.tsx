@@ -128,7 +128,7 @@ export function SalaryPage() {
     { accessorKey: "status", header: "Status", meta: { width: "110px" },
       cell: ({ row }) => <StatusBadge value={row.original.status} /> },
     {
-      id: "actions", header: "", meta: { width: "130px" },
+      id: "actions", header: "Actions", meta: { width: "130px" },
       cell: ({ row }) => {
         const s = row.original;
         return (

@@ -108,7 +108,7 @@ export function MembersPage() {
     { accessorKey: "membership_state", header: "Status", meta: { width: "120px" },
       cell: ({ row }) => <StatusBadge value={row.original.membership_state} /> },
     {
-      id: "actions", header: "", meta: { width: "210px" },
+      id: "actions", header: "Actions", meta: { width: "210px" },
       cell: ({ row }) => {
         const m = row.original;
         return (

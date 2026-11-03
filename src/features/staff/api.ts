@@ -5,7 +5,8 @@ import { apiGet, apiPatch, apiPost, apiPut, cleanParams } from "@/lib/api-client
 import { useBranchStore } from "@/stores/branch-store";
 import type { PageQuery, Paginated, TabCounts } from "@/types/api";
 import type {
-  Employee, EmployeeInput, EmployeeListFilter, EmployeeProfile, EmployeeUpdate, FeedbackCreated, FeedbackInput,
+  Employee, EmployeeInput, EmployeeListFilter, EmployeePayrollInput, EmployeeProfile, EmployeeUpdate,
+  FeedbackCreated, FeedbackInput,
   PTAssignInput,
 } from "@/types/employee";
 import type { EmployeeRole } from "@/types/enums";
@@ -23,9 +24,12 @@ export const staffApi = {
   /** Row count per status tab (active / archive / all) in one call. */
   counts: () => apiGet<TabCounts<EmployeeListFilter>>("/employees/counts"),
   get: (id: string) => apiGet<Employee>(`/employees/${id}`),
-  profile: (id: string) => apiGet<EmployeeProfile>(`/employees/${id}/profile`),
+  /** Staff details page; `month` / `year` pick the attendance month (default: current). */
+  profile: (id: string, month?: number, year?: number) =>
+    apiGet<EmployeeProfile>(`/employees/${id}/profile`, cleanParams({ month, year })),
   create: (body: EmployeeInput) => apiPost<Employee>("/employees", body),
   update: (id: string, body: EmployeeUpdate) => apiPut<Employee>(`/employees/${id}`, body),
+  payroll: (id: string, body: EmployeePayrollInput) => apiPut<Employee>(`/employees/${id}/payroll`, body),
   terminate: (id: string) => apiPatch<Employee>(`/employees/${id}/terminate`),
   addFeedback: (id: string, body: FeedbackInput) => apiPost<FeedbackCreated>(`/employees/${id}/feedback`, body),
   assignPT: (body: PTAssignInput) => apiPost<unknown>("/personal-training/subscribe", body),
@@ -36,7 +40,8 @@ export const staffKeys = {
   list: (branch: string | null | undefined, q: EmployeeListQuery) => ["employees", "list", branch, q] as const,
   counts: (branch: string | null | undefined) => ["employees", "counts", branch] as const,
   detail: (branch: string | null | undefined, id: string) => ["employees", "detail", branch, id] as const,
-  profile: (branch: string | null | undefined, id: string) => ["employees", "profile", branch, id] as const,
+  profile: (branch: string | null | undefined, id: string, month?: number, year?: number) =>
+    ["employees", "profile", branch, id, month ?? null, year ?? null] as const,
 };
 
 /** Employee counts per status tab (Staff tabs, Payroll headcount tile). */

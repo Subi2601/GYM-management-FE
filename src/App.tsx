@@ -32,6 +32,7 @@ const InvoicePage = page(() => import("@/features/payments/pages/InvoicePage"), 
 const PersonalTrainingPage = page(() => import("@/features/training/pages/PersonalTrainingPage"), "PersonalTrainingPage");
 const StaffPage = page(() => import("@/features/staff/pages/StaffPage"), "StaffPage");
 const EmployeeFormPage = page(() => import("@/features/staff/pages/EmployeeFormPage"), "EmployeeFormPage");
+const EmployeeDetailsPage = page(() => import("@/features/staff/pages/EmployeeDetailsPage"), "EmployeeDetailsPage");
 const AttendancePage = page(() => import("@/features/attendance/pages/AttendancePage"), "AttendancePage");
 const SalaryPage = page(() => import("@/features/salary/pages/SalaryPage"), "SalaryPage");
 const DietPlansPage = page(() => import("@/features/diet/pages/DietPlansPage"), "DietPlansPage");
@@ -89,6 +90,7 @@ export default function App() {
                 <Route path="personal-training" element={<Guarded permission="pt:list"><PersonalTrainingPage /></Guarded>} />
                 <Route path="staff" element={<Guarded permission="employee:list"><StaffPage /></Guarded>} />
                 <Route path="staff/new" element={<Guarded permission="employee:create"><EmployeeFormPage /></Guarded>} />
+                <Route path="staff/:id" element={<Guarded permission="employee:list"><EmployeeDetailsPage /></Guarded>} />
                 <Route path="staff/:id/edit" element={<Guarded permission="employee:update"><EmployeeFormPage /></Guarded>} />
                 <Route path="attendance" element={<Guarded permission="attendance:list"><AttendancePage /></Guarded>} />
                 <Route path="salary" element={<Guarded permission="salary:list"><SalaryPage /></Guarded>} />

@@ -114,7 +114,7 @@ export function SubscriptionsPage() {
     { accessorKey: "payment_status", header: "Payment", meta: { width: "110px" },
       cell: ({ row }) => <StatusBadge value={row.original.payment_status} /> },
     {
-      id: "actions", header: "", meta: { width: "150px" },
+      id: "actions", header: "Actions", meta: { width: "150px" },
       cell: ({ row }) => {
         const s = row.original;
         const due = s.renewal_state !== "NONE";

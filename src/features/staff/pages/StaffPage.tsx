@@ -11,11 +11,12 @@ import { FilterSelect, FilterTabs, ListToolbar, type ActiveFilter } from "@/comp
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { staffApi, staffKeys, useStaffCounts, type EmployeeListQuery } from "@/features/staff/api";
-import { EmployeeProfileDrawer } from "@/features/staff/components/EmployeeProfileDrawer";
+import { PayrollDrawer } from "@/features/staff/components/PayrollDrawer";
+import { shiftRanges } from "@/features/staff/lib/shifts";
 import { paginationProps, useAddAction, useListState, useUrlEnum } from "@/hooks/use-list-state";
 import { formatDate, formatINR } from "@/lib/format";
 import { notify } from "@/lib/notify";
-import { humanize } from "@/lib/utils";
+import { cn, humanize } from "@/lib/utils";
 import { useCan } from "@/stores/auth-store";
 import { useBranchStore } from "@/stores/branch-store";
 import { EMPLOYEE_LIST_FILTERS, type Employee, type EmployeeListFilter, type EmployeeSortKey } from "@/types/employee";
@@ -42,7 +43,8 @@ export function StaffPage() {
   const [tab, setTab] = useUrlEnum("tab", EMPLOYEE_LIST_FILTERS, "active");
   const list = useListState();
   const [role, setRole] = useState<EmployeeRole | "">("");
-  const [viewing, setViewing] = useState<Employee | null>(null);
+  const [payrollFor, setPayrollFor] = useState<Employee | null>(null);
+  const openDetails = useCallback((e: Employee) => navigate(`/staff/${e.id}`), [navigate]);
 
   const { setPage } = list;
   // Tab / filter / branch changes restart from page 1.
@@ -64,7 +66,6 @@ export function StaffPage() {
     mutationFn: (id: string) => staffApi.terminate(id),
     onSuccess: async (res) => {
       notify.success(res.message);
-      setViewing(null);
       await qc.invalidateQueries({ queryKey: staffKeys.all });
     },
     onError: notify.error,
@@ -79,44 +80,71 @@ export function StaffPage() {
 
   const columns = useMemo<ColumnDef<Employee, unknown>[]>(() => [
     { accessorKey: "name", header: "Employee", meta: { sortKey: sortKey("name") },
-      cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="truncate font-semibold text-ink">{row.original.name}</div>
-          <div className="font-mono text-xs text-muted">{row.original.employee_code}</div>
-        </div>
-      ) },
-    { accessorKey: "phone", header: "Phone", meta: { width: "130px" } },
-    { accessorKey: "role", header: "Role", meta: { width: "140px", sortKey: sortKey("role") },
-      cell: ({ row }) => humanize(row.original.role) },
-    { accessorKey: "base_salary", header: "Base salary", meta: { width: "140px", align: "right", sortKey: sortKey("base_salary") },
-      cell: ({ row }) => <span className="font-semibold">{formatINR(row.original.base_salary)}</span> },
-    { accessorKey: "average_rating", header: "Rating", meta: { width: "100px", sortKey: sortKey("average_rating") },
       cell: ({ row }) => {
         const r = row.original.average_rating;
-        return r == null ? <span className="text-muted">—</span> : (
-          <span className="inline-flex items-center gap-1 font-semibold">
-            <Icon name="star" strokeWidth={1.5} className="h-3.5 w-3.5 fill-warning text-warning" />
-            {r.toFixed(1)}
-          </span>
+        return (
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate font-semibold text-ink">{row.original.name}</span>
+              {r != null && (
+                <span className="inline-flex shrink-0 items-center gap-0.5 text-xs font-bold text-secondary-grey" title="Average client rating">
+                  <Icon name="star" strokeWidth={1.5} className="h-3 w-3 fill-warning text-warning" />
+                  {r.toFixed(1)}
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-muted"><span className="font-mono">{row.original.employee_code}</span> · {row.original.phone}</div>
+          </div>
         );
       } },
-    { accessorKey: "date_of_joining", header: "Joined", meta: { width: "120px", sortKey: sortKey("date_of_joining") },
+    // Status shows under the role only when it isn't Active (keeps the table narrow; tabs already split by status).
+    { accessorKey: "role", header: "Role", meta: { width: "130px", sortKey: sortKey("role") },
+      cell: ({ row }) => (
+        <div className="flex flex-col items-start gap-1">
+          {humanize(row.original.role)}
+          {row.original.status !== "ACTIVE" && <StatusBadge value={row.original.status} />}
+        </div>
+      ) },
+    { id: "timings", header: "Timings", meta: { width: "180px" },
+      cell: ({ row }) => {
+        const shifts = shiftRanges(row.original);
+        return shifts.length === 0 ? <span className="text-xs font-semibold text-warning">Not set</span> : (
+          <div className="flex flex-col gap-0.5 text-xs">
+            {shifts.map((s) => (
+              <span key={s.label} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                <Icon name={s.label === "Morning" ? "sun" : "moon"} className="h-3.5 w-3.5 text-muted" />
+                {s.range}
+              </span>
+            ))}
+          </div>
+        );
+      } },
+    { accessorKey: "base_salary", header: "Base salary", meta: { width: "120px", align: "right", sortKey: sortKey("base_salary") },
+      cell: ({ row }) => row.original.base_salary > 0
+        ? <span className="font-semibold">{formatINR(row.original.base_salary)}</span>
+        : <span className="text-xs font-semibold text-warning">Not set</span> },
+    { accessorKey: "date_of_joining", header: "Joined", meta: { width: "110px", sortKey: sortKey("date_of_joining") },
       cell: ({ row }) => formatDate(row.original.date_of_joining) },
-    { accessorKey: "status", header: "Status", meta: { width: "120px" },
-      cell: ({ row }) => <StatusBadge value={row.original.status} /> },
     {
-      id: "actions", header: "", meta: { width: "170px" },
+      id: "actions", header: "Actions", meta: { width: "240px" },
       cell: ({ row }) => {
         const e = row.original;
         const active = e.status !== "TERMINATED";
+        const payrollSet = e.base_salary > 0;
         return (
           <ActionGroup>
+            {canUpdate && writable && active && (
+              <button type="button" className={cn("btn-status-action", payrollSet ? "btn-grey" : "btn-yellow")}
+                title="Base salary and bank details" onClick={() => setPayrollFor(e)}>
+                {payrollSet ? "Payroll" : "Set payroll"}
+              </button>
+            )}
             {canTerminate && writable && active && (
               <button type="button" className="btn-status-action btn-red" onClick={() => void onTerminate(e)}>
                 Terminate
               </button>
             )}
-            <ActionIcon kind="view" title="View profile" onClick={() => setViewing(e)} />
+            <ActionIcon kind="view" title="View details" onClick={() => openDetails(e)} />
             {canUpdate && writable && active && (
               <ActionIcon kind="edit" onClick={() => navigate(`/staff/${e.id}/edit`)} />
             )}
@@ -124,7 +152,7 @@ export function StaffPage() {
         );
       },
     },
-  ], [canTerminate, canUpdate, writable, onTerminate, navigate]);
+  ], [canTerminate, canUpdate, writable, onTerminate, navigate, openDetails]);
 
   const active: ActiveFilter[] = [];
   if (role) active.push({ label: `Role: ${humanize(role)}`, onRemove: () => setRole("") });
@@ -150,7 +178,7 @@ export function StaffPage() {
         loading={employees.isLoading}
         fetching={employees.isFetching}
         getRowId={(e) => e.id}
-        onRowClick={setViewing}
+        onRowClick={openDetails}
         rowClassName={(e) =>
           e.status === "TERMINATED" ? ROW_MARKER.muted
             : e.status === "ON_LEAVE" ? ROW_MARKER.new
@@ -178,7 +206,7 @@ export function StaffPage() {
         }
       />
 
-      {viewing && <EmployeeProfileDrawer employee={viewing} onClose={() => setViewing(null)} onTerminate={onTerminate} />}
+      {payrollFor && <PayrollDrawer employee={payrollFor} onClose={() => setPayrollFor(null)} />}
     </div>
   );
 }

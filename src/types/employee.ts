@@ -1,4 +1,4 @@
-import type { EmployeeRole, EmployeeStatus, FitnessGoal, PTStatus } from "@/types/enums";
+import type { AttendanceStatus, EmployeeRole, EmployeeStatus, FitnessGoal, PTStatus, SalaryStatus } from "@/types/enums";
 
 /** GET /employees, /employees/{id} — see backend app/schemas/employee.py (EmployeeResponse). */
 export interface Employee {
@@ -15,24 +15,30 @@ export interface Employee {
   /** PII — plain for pii:view, masked (XXXX-XXXX-1234) otherwise. */
   aadhar_number: string | null;
   pan_number: string | null;
-  id_proof_type: string | null;
-  id_proof_number: string | null;
   bank_account_number: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   emergency_contact_relation: string | null;
+  /** 0 until payroll is set (PUT /employees/{id}/payroll). */
   base_salary: number;
   bank_name: string | null;
   ifsc_code: string | null;
+  /** e.g. name@okaxis */
+  upi_id: string | null;
   status: EmployeeStatus;
   average_rating: number | null;
   date_of_joining: string;
   date_of_termination: string | null;
+  /** Shift timings as "HH:MM:SS"; a shift is either a full pair or null. */
+  morning_start: string | null;
+  morning_end: string | null;
+  evening_start: string | null;
+  evening_end: string | null;
   created_at: string;
   updated_at: string;
 }
 
-/** POST /employees (EmployeeCreate). PUT /employees/{id} takes any subset (EmployeeUpdate). */
+/** POST /employees (EmployeeCreate) — profile only. PUT /employees/{id} takes any subset (EmployeeUpdate). */
 export interface EmployeeInput {
   name: string;
   phone: string;
@@ -41,22 +47,31 @@ export interface EmployeeInput {
   role: EmployeeRole;
   education?: string | null;
   experience?: string | null;
-  aadhar_number: string;
-  pan_number: string;
-  id_proof_type: string;
-  id_proof_number: string;
-  emergency_contact_name: string;
-  emergency_contact_phone: string;
-  emergency_contact_relation: string;
-  base_salary: number;
-  bank_name: string;
-  bank_account_number: string;
-  ifsc_code: string;
+  /** Identity and emergency contact are optional (null = not given / cleared). */
+  aadhar_number: string | null;
+  pan_number: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  emergency_contact_relation: string | null;
   date_of_joining: string;
   status?: EmployeeStatus;
+  /** "HH:MM" — both shifts are required. */
+  morning_start: string;
+  morning_end: string;
+  evening_start: string;
+  evening_end: string;
 }
 
 export type EmployeeUpdate = Partial<EmployeeInput>;
+
+/** PUT /employees/{id}/payroll. Leave `bank_account_number` out to keep the stored (maybe masked) one. */
+export interface EmployeePayrollInput {
+  base_salary: number;
+  bank_name: string | null;
+  bank_account_number?: string | null;
+  ifsc_code: string | null;
+  upi_id: string | null;
+}
 
 /** `status` query of GET /employees (archive = terminated). */
 export const EMPLOYEE_LIST_FILTERS = ["active", "archive", "all"] as const;
@@ -105,12 +120,50 @@ export interface PTClient {
   is_paid: boolean;
 }
 
-/** GET /employees/{id}/profile */
+export interface AttendanceDay {
+  date: string;
+  status: AttendanceStatus;
+  check_in: string | null;
+  check_out: string | null;
+}
+
+/** One month of attendance on the staff details page. */
+export interface AttendanceMonth {
+  /** MM-YYYY */
+  month_year: string;
+  days_in_month: number;
+  /** Days of the month up to today (all days for past months, 0 for future months). */
+  days_elapsed: number;
+  present: number;
+  late: number;
+  absent: number;
+  half_day: number;
+  on_leave: number;
+  days: AttendanceDay[];
+}
+
+export interface PayrollSummary {
+  base_salary: number;
+  last_payout: { month_year: string; net_salary: number; status: SalaryStatus; paid_date: string | null } | null;
+}
+
+/** Trainers only. */
+export interface TrainingSummary {
+  active_clients: number;
+  pt_clients: PTClient[];
+  feedbacks: Feedback[];
+  average_rating: number | null;
+}
+
+/**
+ * GET /employees/{id}/profile?month=&year= — the staff details page. Sections follow the data:
+ * `payroll` is null without salary:list, `training` is null unless the employee is a trainer.
+ */
 export interface EmployeeProfile {
   employee: Employee;
-  feedbacks: Feedback[];
-  pt_clients: PTClient[];
-  average_rating: number | null;
+  attendance: AttendanceMonth;
+  payroll: PayrollSummary | null;
+  training: TrainingSummary | null;
 }
 
 /** POST /personal-training/subscribe (PTSubscribeRequest). */

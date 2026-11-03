@@ -78,7 +78,7 @@ export function DietPlansPage() {
           ? <span className="whitespace-nowrap">{formatDate(row.original.last_modified_date)}</span>
           : <span className="text-muted">—</span> },
       {
-        id: "actions", header: "", meta: { width: "170px" },
+        id: "actions", header: "Actions", meta: { width: "170px" },
         cell: ({ row }) => {
           const m = row.original;
           return (

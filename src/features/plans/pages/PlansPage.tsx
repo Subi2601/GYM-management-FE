@@ -110,7 +110,7 @@ export function PlansPage() {
     ];
     if (canUpdate || canDelete) {
       cols.push({
-        id: "actions", header: "", meta: { width: "110px" },
+        id: "actions", header: "Actions", meta: { width: "110px" },
         cell: ({ row }) => (
           <ActionGroup>
             {canUpdate && <ActionIcon kind="edit" onClick={() => setEditing(row.original)} />}

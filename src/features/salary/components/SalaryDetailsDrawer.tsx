@@ -90,32 +90,34 @@ export function SalaryDetailsDrawer({ salary, onClose }: { salary: Salary; onClo
               <InfoRow label="Bank" value={p.employee.bank_name} />
               <InfoRow label="Account number" value={p.employee.bank_account_number} />
               <InfoRow label="IFSC" value={p.employee.ifsc_code} />
+              <InfoRow label="UPI ID" value={p.employee.upi_id} />
               <InfoRow label="PAN" value={p.employee.pan_number} />
             </div>
           )}
         </Section>
 
-        {p && (
+        {/* Personal training and feedback only exist for trainers (`training` is null otherwise). */}
+        {p?.training && (
           <Section title="Personal training">
-            {p.pt_clients.length > 0 ? (
+            {p.training.pt_clients.length > 0 ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {p.pt_clients.map((pt) => <PTClientCard key={pt.id} pt={pt} />)}
+                {p.training.pt_clients.map((pt) => <PTClientCard key={pt.id} pt={pt} />)}
               </div>
             ) : <p className="m-0 text-sm text-muted">No PT members assigned.</p>}
           </Section>
         )}
 
-        {p && (
+        {p?.training && (
           <Section title="Client feedback"
-            aside={p.average_rating != null && (
+            aside={p.training.average_rating != null && (
               <div className="flex items-center gap-2">
-                <AverageRating value={p.average_rating} />
-                <span className="text-sm text-muted">({p.feedbacks.length} reviews)</span>
+                <AverageRating value={p.training.average_rating} />
+                <span className="text-sm text-muted">({p.training.feedbacks.length} reviews)</span>
               </div>
             )}>
-            {p.feedbacks.length > 0 ? (
+            {p.training.feedbacks.length > 0 ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {p.feedbacks.map((fb) => <FeedbackCard key={fb.id} fb={fb} />)}
+                {p.training.feedbacks.map((fb) => <FeedbackCard key={fb.id} fb={fb} />)}
               </div>
             ) : <p className="m-0 text-sm text-muted">No feedback yet.</p>}
           </Section>

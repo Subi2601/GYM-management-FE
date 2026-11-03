@@ -94,7 +94,7 @@ export function PaymentsPage() {
     ];
     if (canInvoice) {
       cols.push({
-        id: "actions", header: "", meta: { width: "70px" },
+        id: "actions", header: "Actions", meta: { width: "70px" },
         cell: ({ row }) => (
           <ActionGroup>
             <ActionIcon kind="print" title="Print receipt"

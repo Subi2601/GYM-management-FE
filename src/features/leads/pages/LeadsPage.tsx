@@ -156,7 +156,7 @@ export function LeadsPage() {
           </span>
         ) },
       {
-        id: "actions", header: "", meta: { width: "260px" },
+        id: "actions", header: "Actions", meta: { width: "260px" },
         cell: ({ row }) => {
           const lead = row.original;
           return (
