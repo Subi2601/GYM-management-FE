@@ -1,18 +1,14 @@
+import type { UseQueryResult } from "@tanstack/react-query";
 import { useEffect, useRef, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 
 import { Icon } from "@/components/ui/Icon";
-import { useInvoice } from "@/features/payments/api";
+import { sendInvoiceOnWhatsApp, useInvoice, usePublicInvoice } from "@/features/payments/api";
+import { useInvoicePdf } from "@/features/payments/lib/invoice-pdf";
 import { formatDate, formatINR } from "@/lib/format";
-import { cn, humanize, openWhatsApp } from "@/lib/utils";
+import { notify } from "@/lib/notify";
+import { cn, humanize } from "@/lib/utils";
 import type { Invoice } from "@/types/payment";
-
-/** Business letterhead carried over from the original invoice (not stored in the backend). */
-const LETTERHEAD = {
-  studio: "LIFESTYLE & FITNESS STUDIO",
-  contacts: ["Mob: 7598164812, 8428143133", "Mail: stagfitness2702@gmail.com"],
-  gstin: "GSTIN: 33CLMPA7280H2Z2",
-};
 
 /** Invoice brand red: the light-palette accent-dark token (the sheet is always `.theme-light`). */
 const BRAND = "text-accent-dark";
@@ -21,29 +17,48 @@ const BRAND_BORDER = "border-accent-dark";
 /** Printable receipt at /invoice/:paymentId — rendered without the app shell, auto-prints once loaded. */
 export function InvoicePage() {
   const { paymentId } = useParams<{ paymentId: string }>();
-  const invoice = useInvoice(paymentId);
+  return <InvoiceScreen invoice={useInvoice(paymentId)} autoPrint canShare />;
+}
+
+/** /i/:token — the invoice link sent to the member on WhatsApp (no login, no auto print, no share). */
+export function PublicInvoicePage() {
+  const { token } = useParams<{ token: string }>();
+  return <InvoiceScreen invoice={usePublicInvoice(token)} autoPrint={false} canShare={false} />;
+}
+
+interface InvoiceScreenProps {
+  invoice: UseQueryResult<Invoice, Error>;
+  autoPrint: boolean;
+  canShare: boolean;
+}
+
+function InvoiceScreen({ invoice, autoPrint, canShare }: InvoiceScreenProps) {
   const printed = useRef(false);
 
   // Auto print after load, as the original did (once per page view).
   useEffect(() => {
-    if (!invoice.data || printed.current) return;
+    if (!autoPrint || !invoice.data || printed.current) return;
     const id = window.setTimeout(() => {
       printed.current = true;
       window.print();
     }, 1000);
     return () => window.clearTimeout(id);
-  }, [invoice.data]);
+  }, [invoice.data, autoPrint]);
 
   useEffect(() => {
     if (invoice.data) document.title = `Invoice ${invoice.data.receipt_no}`;
   }, [invoice.data]);
 
   const data = invoice.data;
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const { pdf } = useInvoicePdf(canShare ? data : undefined, sheetRef);
 
-  const shareWhatsApp = () => {
-    if (!data) return;
-    const message = `Hello *${data.member.name}*,\n\nThank you for choosing *STAG FITNESS*! \n\nYour payment of *₹${data.paid_amount}* has been received successfully. \n\nYou can view and download your invoice here:\n${window.location.href}\n\nHave a great workout!`;
-    openWhatsApp(data.member.phone, message);
+  // Sends the PDF itself (share sheet on phones; download + open chat on computers).
+  const shareWhatsApp = async () => {
+    if (!data || !pdf) return;
+    if (await sendInvoiceOnWhatsApp(data, false, pdf) === "downloaded") {
+      notify.success("Invoice PDF downloaded. Attach it in the WhatsApp chat (📎)");
+    }
   };
 
   return (
@@ -72,16 +87,18 @@ export function InvoicePage() {
       {data && (
         <>
           <div className="no-print mb-5 flex w-full max-w-[210mm] justify-end gap-[15px]">
-            <button type="button" onClick={shareWhatsApp}
-              className="flex items-center gap-2 rounded-[8pt] border-none bg-[#25D366] px-[20pt] py-[10pt] font-bold text-white shadow-[0_4px_10px_rgba(37,211,102,0.2)] transition-transform hover:-translate-y-0.5 hover:brightness-90">
-              <Icon name="whatsapp" /> Share on WhatsApp
-            </button>
+            {canShare && (
+              <button type="button" onClick={() => void shareWhatsApp()} disabled={!pdf}
+                className="flex items-center gap-2 rounded-[8pt] border-none bg-[#25D366] px-[20pt] py-[10pt] font-bold text-white shadow-[0_4px_10px_rgba(37,211,102,0.2)] transition-transform hover:-translate-y-0.5 hover:brightness-90 disabled:cursor-wait disabled:opacity-60">
+                <Icon name="whatsapp" /> {pdf ? "Share on WhatsApp" : "Preparing PDF…"}
+              </button>
+            )}
             <button type="button" onClick={() => window.print()}
               className="flex items-center gap-2 rounded-[8pt] border-none bg-[#16a34a] px-[20pt] py-[10pt] font-bold text-white shadow-[0_4px_10px_rgba(22,163,74,0.2)] transition-transform hover:-translate-y-0.5 hover:brightness-90">
               <Icon name="print" /> Download / Print PDF
             </button>
           </div>
-          <InvoiceSheet data={data} />
+          <div ref={sheetRef}><InvoiceSheet data={data} /></div>
         </>
       )}
     </div>
@@ -98,7 +115,8 @@ function StatusCard({ children }: { children: ReactNode }) {
 
 const money = (n: number) => formatINR(n);
 
-function InvoiceSheet({ data }: { data: Invoice }) {
+/** The printable A4 sheet — also rendered off-screen to build the WhatsApp PDF (EnrolDone). */
+export function InvoiceSheet({ data }: { data: Invoice }) {
   const branchLine = [data.branch_name, data.branch_location].filter(Boolean).join(", ");
   const thCls = cn("border-b-[1.5pt] bg-subtle p-[8pt] text-left text-[8.5pt] font-bold [print-color-adjust:exact] [-webkit-print-color-adjust:exact]", BRAND, BRAND_BORDER);
   const tdCls = "border-b border-line-light px-[8pt] py-[10pt] text-[9.5pt] text-[#334155]";
@@ -107,23 +125,26 @@ function InvoiceSheet({ data }: { data: Invoice }) {
     <div className="relative mb-10 box-border flex min-h-[297mm] w-[210mm] flex-col bg-white p-[15mm] shadow-[0_0_15px_rgba(0,0,0,0.1)] max-[794px]:w-full max-[794px]:p-[10mm] print:m-0 print:w-full print:p-[12mm] print:shadow-none">
       {/* Corporate header */}
       <div className={cn("mb-[8mm] flex items-start justify-between border-b-[1.5pt] pb-[6mm] max-[794px]:flex-col max-[794px]:gap-[15px]", BRAND_BORDER)}>
-        <div className="flex-1 text-left">
-          <h1 className={cn("m-0 mb-[8pt] text-[24pt] font-extrabold uppercase leading-none tracking-[-0.5pt] max-[794px]:text-[20pt]", BRAND)}>
-            {data.organization_name || "STAG FITNESS"}
-          </h1>
-          <div className="flex flex-col gap-[1pt]">
-            <p className="m-0 text-[10.5pt] font-bold uppercase tracking-[0.5px] text-primary-grey">{LETTERHEAD.studio}</p>
-            {branchLine && <p className="m-0 text-[9pt] leading-[1.3] text-secondary-grey">{branchLine}</p>}
-            {LETTERHEAD.contacts.map((c) => (
-              <p key={c} className="m-0 text-[9pt] leading-[1.3] text-secondary-grey">{c}</p>
-            ))}
-            <p className="m-0 mt-[4pt] text-[9pt] font-bold leading-[1.3] text-primary-grey">{LETTERHEAD.gstin}</p>
+        <div className="flex flex-1 items-start gap-[10pt] text-left">
+          {data.logo_url && <img src={data.logo_url} alt="" className="h-[52pt] w-[52pt] shrink-0 object-contain" />}
+          <div className="min-w-0">
+            <h1 className={cn("m-0 mb-[8pt] text-[24pt] font-extrabold uppercase leading-none tracking-[-0.5pt] max-[794px]:text-[20pt]", BRAND)}>
+              {data.organization_name}
+            </h1>
+            <div className="flex flex-col gap-[1pt]">
+              {data.tagline && <p className="m-0 text-[10.5pt] font-bold uppercase tracking-[0.5px] text-primary-grey">{data.tagline}</p>}
+              {branchLine && <p className="m-0 text-[9pt] leading-[1.3] text-secondary-grey">{branchLine}</p>}
+              {data.phone && <p className="m-0 text-[9pt] leading-[1.3] text-secondary-grey">Mob: {data.phone}</p>}
+              {data.email && <p className="m-0 text-[9pt] leading-[1.3] text-secondary-grey">Mail: {data.email}</p>}
+              {data.gstin && <p className="m-0 mt-[4pt] text-[9pt] font-bold leading-[1.3] text-primary-grey">GSTIN: {data.gstin}</p>}
+            </div>
           </div>
         </div>
 
         <div className="flex flex-col items-end text-right max-[794px]:items-start max-[794px]:text-left">
           <div className={cn("mb-[8pt] text-[20pt] font-extrabold tracking-[2pt]", BRAND)}>INVOICE</div>
           <div className={cn("flex w-fit flex-col gap-[4pt] rounded-[6pt] border-r-[3pt] bg-subtle p-[8pt] [print-color-adjust:exact]", BRAND_BORDER)}>
+            {data.gym_code && <Meta label="Gym ID:" value={data.gym_code} />}
             <Meta label="Invoice No:" value={`#${data.receipt_no}`} />
             <Meta label="Date:" value={formatDate(data.payment_date)} />
             <Meta label="Payment Mode:" value={humanize(data.payment_mode)} />
@@ -173,13 +194,18 @@ function InvoiceSheet({ data }: { data: Invoice }) {
 
       {/* Summary */}
       <div className="mb-[15mm] ml-auto flex w-[80mm] flex-col gap-[5pt] max-[794px]:w-full">
-        <SummaryRow label="Subtotal" value={money(data.gross)} />
+        <SummaryRow label="Subtotal" value={money(data.gross + (data.credit_amount || 0))} />
         <SummaryRow label="CGST (0%)" value={money(0)} />
         <SummaryRow label="SGST (0%)" value={money(0)} />
+        {data.credit_amount > 0 && (
+          <SummaryRow label={data.credit_label || "Credit from previous plan"}
+            value={<span className="text-[#ef4444]">- {money(data.credit_amount)}</span>} />
+        )}
         {data.discount_amount > 0 && (
           <SummaryRow label={`Discount (${data.discount_reason || "Offer"})`}
             value={<span className="text-[#ef4444]">- {money(data.discount_amount)}</span>} />
         )}
+        {data.offer_bonus && <SummaryRow label="Offer bonus" value={<span className="text-[#16a34a]">{data.offer_bonus}</span>} />}
         <SummaryRow label="Net Amount" value={money(data.net_amount)} variant="highlight" />
         <SummaryRow label="Amount Paid" value={money(data.paid_amount)} variant="paid" />
         {data.balance_amount > 0 && (
@@ -196,9 +222,12 @@ function InvoiceSheet({ data }: { data: Invoice }) {
             <div className="h-[15mm]" />
             <div className="mb-[4pt] border-t border-primary-grey" />
             <p className="m-0 text-[9pt] font-semibold text-secondary-grey">Authorized Signatory</p>
-            <p className="m-0 text-[9pt] font-bold uppercase text-primary-grey">For {data.organization_name || "STAG FITNESS"}</p>
+            <p className="m-0 text-[9pt] font-bold uppercase text-primary-grey">For {data.organization_name}</p>
           </div>
         </div>
+        {data.invoice_footer && (
+          <div className="mx-auto mb-[6pt] max-w-[150mm] whitespace-pre-line text-[8.5pt] text-secondary-grey">{data.invoice_footer}</div>
+        )}
         <div className="text-[10.5pt] font-bold tracking-[0.5pt] text-ink">THANK YOU FOR YOUR MEMBERSHIP!</div>
         <div className="mt-[4pt] text-[7.5pt] text-slate-400">This is a computer generated invoice.</div>
       </div>

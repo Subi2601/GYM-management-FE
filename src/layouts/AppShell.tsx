@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 
-import { ManageBranchesModal } from "@/features/branches/components/ManageBranchesModal";
 import { Header } from "@/layouts/Header";
 import { Sidebar } from "@/layouts/Sidebar";
 import { useAuthStore } from "@/stores/auth-store";
@@ -12,7 +11,6 @@ export function AppShell() {
   const me = useAuthStore((s) => s.me);
   const selectedBranchId = useBranchStore((s) => s.selectedBranchId);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [branchesOpen, setBranchesOpen] = useState(false);
 
   // Owners choose a branch (or All Branches) before entering the app, as before.
   if (me?.can_switch_branch && selectedBranchId === undefined) return <Navigate to="/branch-selection" replace />;
@@ -23,13 +21,12 @@ export function AppShell() {
         <div className="fixed inset-0 z-[999] hidden bg-black/40 backdrop-blur-[4px] max-md:block" onClick={() => setSidebarOpen(false)} />
       )}
       <div className="[grid-area:sidebar] max-md:hidden" />
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onManageBranches={() => setBranchesOpen(true)} />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <Header onToggleSidebar={() => setSidebarOpen((o) => !o)} />
       {/* No overflow here: the page (body) scrolls, so sticky bars inside screens stick to the viewport. */}
       <main className="app-main min-w-0 px-10 py-8 [grid-area:main] max-md:p-5">
         <Outlet />
       </main>
-      <ManageBranchesModal open={branchesOpen} onClose={() => setBranchesOpen(false)} />
     </div>
   );
 }

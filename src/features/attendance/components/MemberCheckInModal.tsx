@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -9,6 +9,7 @@ import { attendanceApi, attendanceKeys } from "@/features/attendance/api";
 import { useMemberLookup } from "@/features/lookups/api";
 import { formatDate } from "@/lib/format";
 import { notify } from "@/lib/notify";
+import { useBranchStore } from "@/stores/branch-store";
 
 const FORM_ID = "member-check-in-form";
 
@@ -16,10 +17,21 @@ const FORM_ID = "member-check-in-form";
 export function MemberCheckInModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const members = useMemberLookup();
+  const branch = useBranchStore((s) => s.selectedBranchId);
+  // Other branches' members whose plan is valid at every branch (needs one branch selected).
+  const visitors = useQuery({
+    queryKey: attendanceKeys.visitors(branch),
+    queryFn: async () => (await attendanceApi.visitors()).data,
+    enabled: !!branch,
+  });
   const [memberId, setMemberId] = useState("");
   const [error, setError] = useState<string>();
 
   const groups = useMemo<RichOptionGroup<string>[]>(() => {
+    const visiting = (visitors.data ?? []).map((m) => ({
+      value: m.id, label: m.name, icon: "user" as const,
+      hint: `${m.registration_id} · ${m.phone} · ${m.home_branch}`,
+    }));
     const all = members.data ?? [];
     const withPlan = all.filter((m) => m.membership_state === "ACTIVE" || m.membership_state === "EXPIRING");
     const without = all.filter((m) => !withPlan.includes(m));
@@ -29,9 +41,10 @@ export function MemberCheckInModal({ onClose }: { onClose: () => void }) {
     });
     return [
       { label: "Active membership", options: withPlan.map(option) },
+      { label: "Visiting from other branches (all-branch plan)", options: visiting },
       { label: "Expired / no plan (check-in will be refused)", options: without.map(option) },
     ].filter((g) => g.options.length > 0);
-  }, [members.data]);
+  }, [members.data, visitors.data]);
 
   const checkIn = useMutation({
     mutationFn: (id: string) => attendanceApi.memberCheckIn(id),

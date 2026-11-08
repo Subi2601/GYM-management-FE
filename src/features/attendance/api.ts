@@ -1,7 +1,7 @@
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api-client";
 import type {
   AttendanceLocationInput, AttendanceMarkInput, AttendanceQr, AttendanceRecord, CheckinInfo, CheckResult,
-  DailyAttendance, LinkedDevice, MemberDaily, MonthlyAttendance,
+  DailyAttendance, LinkedDevice, MemberDaily, MonthlyAttendance, VisitingMember,
 } from "@/types/attendance";
 
 export interface MonthlyQuery {
@@ -17,6 +17,8 @@ export const attendanceApi = {
   checkout: (employeeId: string) => apiPost<AttendanceRecord>(`/attendance/${employeeId}/checkout`),
   // members
   membersDaily: (date: string) => apiGet<MemberDaily>("/attendance/members/daily", { date }),
+  /** Members of other branches with an all-branch plan, who may check in here. */
+  visitors: () => apiGet<VisitingMember[]>("/attendance/members/visitors"),
   memberCheckIn: (memberId: string) => apiPost<CheckResult>("/attendance/members/check-in", { member_id: memberId }),
   memberCheckOut: (memberId: string) => apiPost<CheckResult>(`/attendance/members/${memberId}/check-out`),
   /** Close a visit: now (today) or at `time` (`HH:MM`, required for a past day). */
@@ -46,6 +48,7 @@ export const attendanceKeys = {
   monthly: (branch: string | null | undefined, q: MonthlyQuery) => ["attendance", "monthly", branch, q] as const,
   qr: (branch: string | null | undefined) => ["attendance", "qr", branch] as const,
   devices: (branch: string | null | undefined) => ["attendance", "devices", branch] as const,
+  visitors: (branch: string | null | undefined) => ["attendance", "visitors", branch] as const,
 };
 
 /** Minutes → "1h 25m" / "40m". */

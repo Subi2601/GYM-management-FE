@@ -31,6 +31,8 @@ export const requiredAmount = z.string().trim().min(1, "Required").refine(isAmou
 export const billingShape = {
   /** Gross = Σ plan prices; set by the screen, not typed. */
   amount: z.number().min(0),
+  /** Offer from the master ("" = none); discount_amount / discount_reason are filled from it (OfferSelect). */
+  offer_id: z.string(),
   discount_amount: optionalAmount,
   discount_reason: z.string().max(200),
   paid_amount: requiredAmount,
@@ -68,15 +70,24 @@ export function balanceOf(amount: number, discount: string, paid: string): numbe
 }
 
 interface BillingValues extends BillingLike {
+  offer_id: string;
   discount_reason: string;
   payment_mode: PaymentMode;
   balance_due_date: string;
 }
 
+/** Empty billing values every form starts from. */
+export const BILLING_DEFAULTS = {
+  amount: 0, offer_id: "", discount_amount: "", discount_reason: "", paid_amount: "0",
+  payment_mode: "CASH" as PaymentMode, balance_due_date: "",
+};
+
 export function toEnrollPayment(v: BillingValues): EnrollPayment {
   const discount = toNumber(v.discount_amount);
   const balance = balanceOf(v.amount, v.discount_amount, v.paid_amount);
   return {
+    // The backend recomputes the discount from the offer, so the % can't be changed on the way.
+    offer_id: v.offer_id || null,
     discount_amount: discount,
     discount_reason: discount > 0 && v.discount_reason.trim() ? v.discount_reason.trim() : null,
     paid_amount: toNumber(v.paid_amount),

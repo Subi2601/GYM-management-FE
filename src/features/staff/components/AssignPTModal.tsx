@@ -37,7 +37,7 @@ interface Props {
 export function AssignPTModal({ open, trainerId, trainerName, onClose }: Props) {
   const qc = useQueryClient();
   const members = useMemberLookup(open);
-  const plans = usePlanLookup("ADD_ON", open);
+  const plans = usePlanLookup("ADD_ON", open, true);
   const ptPlans = (plans.data ?? []).filter((p) => p.service_type === "PERSONAL_TRAINING");
   const activeMembers = (members.data ?? []).filter((m) => m.status === "ACTIVE");
 

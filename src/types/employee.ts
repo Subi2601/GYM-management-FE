@@ -65,6 +65,34 @@ export interface EmployeeInput {
 export type EmployeeUpdate = Partial<EmployeeInput>;
 
 /** PUT /employees/{id}/payroll. Leave `bank_account_number` out to keep the stored (maybe masked) one. */
+/** App login roles a staff member can get (owner logins come with the branch). */
+export const STAFF_LOGIN_ROLES = ["ADMIN", "TRAINER"] as const;
+export type StaffLoginRole = (typeof STAFF_LOGIN_ROLES)[number];
+
+/** GET /employees/{id}/login */
+export interface StaffLogin {
+  employee_id: string;
+  has_login: boolean;
+  enabled: boolean;
+  /** Login ID = the employee's email. */
+  email: string | null;
+  role: StaffLoginRole | "OWNER";
+  /** The gym role this login has (or would get): Roles & Access. */
+  role_id: string | null;
+  role_name: string | null;
+  role_level: number | null;
+  branch_id: string;
+  branch_name: string;
+  last_login_at: string | null;
+}
+
+/** PUT /employees/{id}/login — password required to create, optional after (= reset). */
+export interface StaffLoginInput {
+  /** The gym role to give (must be below your own level); empty = keep / default. */
+  role_id?: string | null;
+  password?: string | null;
+}
+
 export interface EmployeePayrollInput {
   base_salary: number;
   bank_name: string | null;

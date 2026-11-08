@@ -6,7 +6,7 @@ import { useMatch, useNavigate, useParams } from "react-router-dom";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/Button";
-import { Field, Input, READONLY_INPUT, Select, Textarea } from "@/components/ui/Field";
+import { Checkbox, Field, Input, READONLY_INPUT, Select, Textarea } from "@/components/ui/Field";
 import { FormPage } from "@/components/ui/FormPage";
 import { Icon } from "@/components/ui/Icon";
 import { PageLoader } from "@/components/ui/Loaders";
@@ -15,21 +15,32 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { usePlanLookup, useTrainerLookup } from "@/features/lookups/api";
 import { FitnessGoalSelect } from "@/features/lookups/fitness-goals";
 import { memberApi, memberKeys, useInvalidateMembers } from "@/features/members/api";
+import { EnrolDone } from "@/features/members/components/EnrolDone";
+import { emptyEntry, groupEntryError, GroupMembersField, toGroupMembers,
+  type GroupEntry } from "@/features/members/components/GroupMembersField";
+import { usePlanCategories } from "@/features/plans/api";
+import { PlanBadges } from "@/features/plans/components/PlanBadges";
+import { planDuration } from "@/features/plans/labels";
 import { PaymentSummaryCard, PlanCard, WizardSteps } from "@/features/members/components/wizard-parts";
-import { ID_PROOF_TYPES, memberProfileSchema, toMemberBody, toProfileValues,
+import { memberProfileSchema, toMemberBody, toProfileValues,
   type MemberProfileValues } from "@/features/members/lib/member-form";
-import { openInvoice, subscriptionApi, useInvalidateBilling } from "@/features/subscriptions/api";
-import { balanceOf, billingShape, netPayable, PAYMENT_MODE_LABEL, refineBilling, round2, toEnrollPayment,
+import { OfferSelect } from "@/features/offers/components/OfferSelect";
+import { MemberPicker } from "@/features/lookups/MemberPicker";
+import { AssessmentSection } from "@/features/members/components/AssessmentSection";
+import { MembershipHistory } from "@/features/members/components/MembershipHistory";
+import { MembershipActionsDrawer } from "@/features/memberships/components/MembershipActionsDrawer";
+import { RenewDrawer } from "@/features/subscriptions/components/RenewDrawer";
+import { subscriptionApi, useInvalidateBilling } from "@/features/subscriptions/api";
+import { useWriteAccess } from "@/hooks/use-write-access";
+import { BILLING_DEFAULTS, balanceOf, billingShape, netPayable, PAYMENT_MODE_LABEL, refineBilling, round2, toEnrollPayment,
   toNumber } from "@/features/subscriptions/lib/billing";
-import { formatINR, todayISO } from "@/lib/format";
+import { formatDate, formatINR, todayISO } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 import { useCan } from "@/stores/auth-store";
 import { useBranchStore } from "@/stores/branch-store";
 import { PAYMENT_MODES } from "@/types/enums";
 import type { Member, MemberInput } from "@/types/member";
-
-const DISCOUNT_REASONS = ["Referral Offer", "New Year Special", "Student Discount", "Existing Client Reward",
-  "Corporate Tie-up", "Other"] as const;
 
 const PROFILE_FORM = "member-profile-form";
 const PAYMENT_FORM = "member-payment-form";
@@ -49,8 +60,10 @@ type PaymentValues = z.infer<typeof paymentSchema>;
 type Step = 1 | 2 | 3;
 
 /**
- * /members/new, /members/:id (view) and /members/:id/edit. Loads the member, then renders the 3-step
- * registration: profile (POST/PUT /members) → plans + start date → payment (POST /subscriptions/enroll) → invoice.
+ * /members/new: the 3-step registration — profile (POST /members) → plans + start date → payment
+ * (POST /subscriptions/enroll) → invoice.
+ * /members/:id (view) and /members/:id/edit: the profile only (PUT /members) plus the Membership card — plan history
+ * and the Renew / Upgrade drawer, so fixing a phone number never walks through billing.
  */
 export function MemberFormPage() {
   const { id } = useParams<{ id: string }>();
@@ -88,7 +101,12 @@ function MemberWizard({ member, readOnly }: MemberWizardProps) {
   const navigate = useNavigate();
   const branch = useBranchStore((s) => s.selectedBranchId);
   const canUpdate = useCan("member:update");
-  const canEnroll = useCan("subscription:create") && !readOnly;
+  // Plan + payment steps belong to a new registration; existing members renew / upgrade from the drawer.
+  const canEnroll = useCan("subscription:create") && !member;
+  const billing = useWriteAccess("subscription:create");
+  const [renewing, setRenewing] = useState<"renew" | "upgrade" | null>(null);
+  const manage = useWriteAccess("membership:manage");
+  const [managing, setManaging] = useState(false);
   const invalidateMembers = useInvalidateMembers();
   const invalidateBilling = useInvalidateBilling();
   const toList = () => navigate("/members");
@@ -98,6 +116,8 @@ function MemberWizard({ member, readOnly }: MemberWizardProps) {
   const [registrationId, setRegistrationId] = useState<string | null>(member?.registration_id ?? null);
   const [planIds, setPlanIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState(todayISO());
+  /** Set once the payment is saved: the success screen with "Send on WhatsApp". */
+  const [donePaymentId, setDonePaymentId] = useState<string | null>(null);
 
   // ── data ────────────────────────────────────────────────────────────
   const nextId = useQuery({
@@ -106,12 +126,31 @@ function MemberWizard({ member, readOnly }: MemberWizardProps) {
     enabled: !member,
     staleTime: 0,
   });
-  const plansQuery = usePlanLookup(undefined, canEnroll);
+  const plansQuery = usePlanLookup(undefined, canEnroll, true);
   const plans = useMemo(() => plansQuery.data ?? [], [plansQuery.data]);
   const selectedPlans = useMemo(() => plans.filter((p) => planIds.includes(p.id)), [plans, planIds]);
   const gross = round2(selectedPlans.reduce((sum, p) => sum + p.price, 0));
   const needsTrainer = selectedPlans.some((p) => p.service_type === "PERSONAL_TRAINING");
   const trainers = useTrainerLookup(canEnroll && needsTrainer);
+
+  // Category chips: the owner's categories that have plans on sale, in their order.
+  const categories = usePlanCategories();
+  const planCats = useMemo(() => (categories.data ?? []).filter((c) => plans.some((p) => p.category_id === c.id)),
+    [categories.data, plans]);
+  const [catId, setCatId] = useState<string | null>(null);
+  const activeCat = catId ?? planCats[0]?.id ?? null;
+
+  // Group package (couple, family …): the other members; ID check (student plans).
+  const groupPlan = selectedPlans.find((p) => p.group_size > 1) ?? null;
+  const [groupEntries, setGroupEntries] = useState<GroupEntry[]>([]);
+  useEffect(() => {
+    const needed = groupPlan ? groupPlan.group_size - 1 : 0;
+    setGroupEntries((cur) => (cur.length === needed ? cur
+      : [...cur.slice(0, needed), ...Array.from({ length: Math.max(0, needed - cur.length) }, emptyEntry)]));
+  }, [groupPlan]);
+  const idChecks = [...new Set(selectedPlans.flatMap((p) => (p.id_check ? [p.id_check] : [])))];
+  const [idVerified, setIdVerified] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
 
   // ── step 1: profile ─────────────────────────────────────────────────
   const profile = useForm<MemberProfileValues>({
@@ -135,20 +174,18 @@ function MemberWizard({ member, readOnly }: MemberWizardProps) {
   });
 
   const onSubmitProfile = (v: MemberProfileValues) =>
-    saveMember.mutate(toMemberBody(v, !memberId || !!profile.formState.dirtyFields.id_proof_number));
+    saveMember.mutate(toMemberBody(v));
 
   // ── step 3: payment ─────────────────────────────────────────────────
   const payment = useForm<PaymentValues>({
     resolver: zodResolver(paymentSchema),
-    defaultValues: {
-      amount: 0, discount_amount: "", discount_reason: "", paid_amount: "0", payment_mode: "CASH",
-      balance_due_date: "", trainer_id: "", needs_trainer: false,
-    },
+    defaultValues: { ...BILLING_DEFAULTS, trainer_id: "", needs_trainer: false },
   });
   const yErr = payment.formState.errors;
   const discount = payment.watch("discount_amount");
   const paid = payment.watch("paid_amount");
   const reason = payment.watch("discount_reason");
+  const offerId = payment.watch("offer_id");
 
   useEffect(() => {
     payment.setValue("amount", gross);
@@ -167,9 +204,8 @@ function MemberWizard({ member, readOnly }: MemberWizardProps) {
     mutationFn: subscriptionApi.enroll,
     onSuccess: async (res) => {
       notify.success(res.message);
-      openInvoice(res.data.payment_id);
+      setDonePaymentId(res.data.payment_id);
       await invalidateBilling();
-      toList();
     },
     onError: notify.error,
   });
@@ -181,6 +217,8 @@ function MemberWizard({ member, readOnly }: MemberWizardProps) {
       plan_ids: planIds,
       start_date: startDate || null,
       trainer_id: needsTrainer && v.trainer_id ? v.trainer_id : null,
+      group_members: groupPlan ? toGroupMembers(groupEntries) : [],
+      id_verified: idChecks.length > 0 && idVerified,
       payment: toEnrollPayment(v),
     });
   };
@@ -190,13 +228,25 @@ function MemberWizard({ member, readOnly }: MemberWizardProps) {
     s === 1 || (canEnroll && !!memberId && (s === 2 || planIds.length > 0));
 
   const goToPayment = () => {
-    if (planIds.length === 0) return notify.errorText("Please select a plan.");
-    if (!startDate) return notify.errorText("Please choose the subscription start date.");
-    setStep(3);
+    const problem = planIds.length === 0 ? "Select a plan"
+      : !startDate ? "Choose the start date"
+        : groupPlan ? groupEntryError(groupEntries)
+          : null;
+    const idProblem = idChecks.length > 0 && !idVerified ? `Tick "${idChecks.join(", ")} verified" to continue` : null;
+    setPlanError(problem ?? idProblem);
+    if (!problem && !idProblem) setStep(3);
   };
 
-  const togglePlan = (id: string) =>
-    setPlanIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  const togglePlan = (id: string) => {
+    setPlanError(null);
+    const plan = plans.find((p) => p.id === id);
+    setPlanIds((cur) => {
+      if (cur.includes(id)) return cur.filter((x) => x !== id);
+      // One group package per bill: picking another replaces it.
+      const next = plan && plan.group_size > 1 ? cur.filter((x) => (plans.find((p) => p.id === x)?.group_size ?? 1) <= 1) : cur;
+      return [...next, id];
+    });
+  };
 
   const regIdDisplay = registrationId ?? (nextId.isLoading ? "Fetching…" : nextId.data?.data.code ?? "");
   const title = readOnly ? member?.name ?? "Member" : member ? "Edit member" : "New member";
@@ -234,13 +284,21 @@ function MemberWizard({ member, readOnly }: MemberWizardProps) {
     </>
   );
 
+  if (donePaymentId) {
+    return (
+      <FormPage title={member ? "Membership renewed" : "Member registered"} backTo="/members" backLabel="Members">
+        <EnrolDone paymentId={donePaymentId} welcome={!member} onAddAnother={() => navigate(0)} onClose={toList} />
+      </FormPage>
+    );
+  }
+
   return (
     <FormPage
       title={title}
       subtitle={subtitle}
       backTo="/members"
       backLabel="Members"
-      header={!readOnly && <WizardSteps current={step} onSelect={(s) => canReach(s) && setStep(s)} />}
+      header={!member && <WizardSteps current={step} canReach={canReach} onSelect={(s) => canReach(s) && setStep(s)} />}
       actions={actions}
     >
       {/* Step 1 — profile (kept mounted so values survive Back) */}
@@ -275,6 +333,13 @@ function MemberWizard({ member, readOnly }: MemberWizardProps) {
               <Field label="Address" htmlFor="m-address" className="md:col-span-2 lg:col-span-3" error={pErr.address?.message}>
                 <Textarea id="m-address" rows={2} placeholder="Full residential address" {...profile.register("address")} />
               </Field>
+              <Field label="Referred by" htmlFor="m-referred" className="md:col-span-2"
+                hint="The member who brought them in (counts for referral rewards)">
+                <Controller name="referred_by_id" control={profile.control} render={({ field }) => (
+                  <MemberPicker id="m-referred" value={field.value} onChange={field.onChange} excludeId={member?.id}
+                    currentName={member?.referred_by_name} placeholder="Not referred" />
+                )} />
+              </Field>
             </div>
           </Section>
 
@@ -298,57 +363,139 @@ function MemberWizard({ member, readOnly }: MemberWizardProps) {
             </div>
           </Section>
 
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <Section title="Emergency contact">
-              <div className="flex flex-col gap-4">
-                <Field label="Contact name" htmlFor="m-ec-name" error={pErr.emergency_contact_name?.message}>
-                  <Input id="m-ec-name" placeholder="Name of relative / friend" {...profile.register("emergency_contact_name")} />
-                </Field>
-                <Field label="Contact phone" htmlFor="m-ec-phone" error={pErr.emergency_contact_phone?.message}>
-                  <Input id="m-ec-phone" inputMode="numeric" maxLength={10} placeholder="10-digit mobile"
-                    invalid={!!pErr.emergency_contact_phone} {...profile.register("emergency_contact_phone")} />
-                </Field>
-              </div>
-            </Section>
-            <Section title="ID proof">
-              <div className="flex flex-col gap-4">
-                <Field label="ID proof type" htmlFor="m-id-type" error={pErr.id_proof_type?.message}>
-                  <Select id="m-id-type" {...profile.register("id_proof_type")}>
-                    <option value="">Select type</option>
-                    {ID_PROOF_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </Select>
-                </Field>
-                <Field label="ID proof number" htmlFor="m-id-number" error={pErr.id_proof_number?.message}>
-                  <Input id="m-id-number" placeholder="e.g. 1234-5678-9012" autoComplete="off" {...profile.register("id_proof_number")} />
-                </Field>
-              </div>
-            </Section>
-          </div>
+          <Section title="Emergency contact" description="Who to call in an emergency (optional)">
+            <div className={GRID_3}>
+              <Field label="Contact name" htmlFor="m-ec-name" error={pErr.emergency_contact_name?.message}>
+                <Input id="m-ec-name" placeholder="Name of relative / friend" {...profile.register("emergency_contact_name")} />
+              </Field>
+              <Field label="Contact phone" htmlFor="m-ec-phone" error={pErr.emergency_contact_phone?.message}>
+                <Input id="m-ec-phone" inputMode="numeric" maxLength={10} placeholder="10-digit mobile"
+                  invalid={!!pErr.emergency_contact_phone} {...profile.register("emergency_contact_phone")} />
+              </Field>
+            </div>
+          </Section>
         </fieldset>
       </form>
 
+      {member && step === 1 && (
+        <Section className="mt-5" title="Membership"
+          description={member.current_plan_name
+            ? <>Current: <b className="text-ink">{member.current_plan_name}</b>{member.expiry_date && ` · till ${formatDate(member.expiry_date)}`}</>
+            : "No plan yet"}
+          aside={(billing.show || manage.show) && (
+            <span className="inline-flex flex-wrap justify-end gap-2">
+              {manage.show && member.expiry_date && member.expiry_date >= todayISO() && (
+                <span title={manage.reason} className="inline-flex">
+                  <Button variant="secondary" icon={<Icon name="clock" className="h-4 w-4" />} disabled={manage.disabled}
+                    onClick={() => setManaging(true)}>
+                    Freeze / Transfer / Cancel
+                  </Button>
+                </span>
+              )}
+              {billing.show && (
+                <span title={billing.reason} className="inline-flex">
+                  <Button icon={<Icon name="refresh" className="h-4 w-4" />} disabled={billing.disabled}
+                    onClick={() => setRenewing("renew")}>
+                    {member.current_plan_name ? "Renew / Upgrade" : "Add plan"}
+                  </Button>
+                </span>
+              )}
+            </span>
+          )}>
+          <MembershipHistory memberId={member.id} />
+        </Section>
+      )}
+      {member && step === 1 && <AssessmentSection memberId={member.id} height={member.height} weight={member.weight} />}
+      {member && managing && (
+        <MembershipActionsDrawer member={{ id: member.id, name: member.name }} onClose={() => setManaging(false)} />
+      )}
+      {member && renewing && (
+        <RenewDrawer initialMode={renewing} onClose={() => setRenewing(null)}
+          row={{ member_id: member.id, member_name: member.name, registration_id: member.registration_id,
+            plan_name: member.current_plan_name ?? "No plan" }} />
+      )}
+
       {/* Step 2 — plans */}
       {step === 2 && (
-        <>
-          <Section title="Choose plans" description="Pick a membership and any add-ons. You can select more than one.">
-            {plansQuery.isLoading && <p className="m-0 text-sm text-muted">Loading plans…</p>}
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_320px]">
+          <div className="flex min-w-0 flex-col gap-5">
+            {plansQuery.isLoading && <Section title="Plans"><p className="m-0 text-sm text-muted">Loading plans…</p></Section>}
             {!plansQuery.isLoading && plans.length === 0 && (
-              <p className="m-0 rounded-xl border-2 border-dashed border-line bg-subtle p-6 text-center text-sm text-muted">
-                No plans configured for this branch.
-              </p>
+              <Section title="Plans">
+                <p className="m-0 rounded-xl border-2 border-dashed border-line bg-subtle p-6 text-center text-sm text-muted">
+                  No plans configured for this branch. Add them under Plans &amp; Pricing.
+                </p>
+              </Section>
             )}
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
-              {plans.map((p) => (
-                <PlanCard key={p.id} plan={p} selected={planIds.includes(p.id)} onToggle={() => togglePlan(p.id)} />
-              ))}
+            {plans.length > 0 && (
+              <Section title="Choose a plan" description="Pick a membership, and add-ons if any">
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {planCats.map((c) => {
+                    const picked = selectedPlans.filter((p) => p.category_id === c.id).length;
+                    return (
+                      <button key={c.id} type="button" onClick={() => setCatId(c.id)}
+                        className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition-colors",
+                          c.id === activeCat ? "border-accent bg-accent-light text-accent" : "border-line bg-surface text-secondary-grey hover:border-line-accent")}>
+                        {c.name}
+                        {picked > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-grad px-1 text-[11px] text-white">{picked}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {plans.filter((p) => p.category_id === activeCat).map((p) => (
+                    <PlanCard key={p.id} plan={p} selected={planIds.includes(p.id)} onToggle={() => togglePlan(p.id)} />
+                  ))}
+                </div>
+              </Section>
+            )}
+          </div>
+
+          <aside className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-5 shadow-subtle lg:sticky lg:top-[calc(var(--header-height)+24px)]">
+            <div>
+              <h3 className="m-0 text-[15px] font-bold text-ink">Selected</h3>
+              {selectedPlans.length === 0 ? (
+                <p className="m-0 mt-2 text-[13px] text-muted">Pick a membership, and add-ons if any.</p>
+              ) : (
+                <ul className="m-0 mt-3 flex list-none flex-col gap-2.5 p-0 text-[13px]">
+                  {selectedPlans.map((p) => (
+                    <li key={p.id}>
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="min-w-0 text-ink">{p.category_name} · {p.name}</span>
+                        <span className="whitespace-nowrap font-semibold text-ink">{formatINR(p.price)}</span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                        {planDuration(p)}<PlanBadges plan={p} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
+                <span className="text-sm font-semibold text-muted">Total</span>
+                <span className="font-display text-2xl text-accent">{formatINR(gross)}</span>
+              </div>
             </div>
-          </Section>
-          <Section title="Start date">
-            <Field label="Subscription start date" htmlFor="m-start" required className="max-w-xs">
+
+            {groupPlan && (
+              <div>
+                <div className="mb-2 text-[13px] font-bold text-ink">Members ({groupPlan.group_size})</div>
+                <GroupMembersField payerName={profile.getValues("name") || member?.name || "This member"} payerId={memberId}
+                  entries={groupEntries} onChange={(e) => { setGroupEntries(e); setPlanError(null); }} />
+              </div>
+            )}
+
+            {idChecks.length > 0 && (
+              <Checkbox checked={idVerified} onChange={(v) => { setIdVerified(v); setPlanError(null); }}
+                label={`${idChecks.join(", ")} verified`} />
+            )}
+
+            <Field label="Start date" htmlFor="m-start" required>
               <Input id="m-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             </Field>
-          </Section>
-        </>
+            {planError && <p className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-[13px] font-semibold text-danger">{planError}</p>}
+          </aside>
+        </div>
       )}
 
       {/* Step 3 — payment */}
@@ -366,16 +513,8 @@ function MemberWizard({ member, readOnly }: MemberWizardProps) {
               </Field>
             )}
             <div className={GRID_2}>
-              <Field label="Discount (₹)" htmlFor="m-discount" error={yErr.discount_amount?.message}>
-                <Input id="m-discount" type="number" min={0} step="0.01" placeholder="e.g. 500" invalid={!!yErr.discount_amount}
-                  {...payment.register("discount_amount")} />
-              </Field>
-              <Field label="Offer / reason" htmlFor="m-reason">
-                <Select id="m-reason" {...payment.register("discount_reason")}>
-                  <option value="">No discount</option>
-                  {DISCOUNT_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                </Select>
-              </Field>
+              <OfferSelect id="m-offer" lines={selectedPlans.map((p) => ({ categoryId: p.category_id, amount: p.price }))} value={offerId} className="md:col-span-2"
+                setField={(n, val) => payment.setValue(n, val, { shouldValidate: n === "discount_amount" })} />
               <Field label="Amount paid now (₹)" htmlFor="m-paid" required error={yErr.paid_amount?.message}>
                 <Input id="m-paid" type="number" min={0} step="0.01" placeholder="Amount received" invalid={!!yErr.paid_amount}
                   {...payment.register("paid_amount")} />

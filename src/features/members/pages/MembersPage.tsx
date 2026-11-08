@@ -14,11 +14,15 @@ import { usePlanLookup } from "@/features/lookups/api";
 import { MEMBER_FILTERS, memberApi, memberKeys, useInvalidateMembers, type MemberFilter,
   type MemberListQuery, type MemberSortKey } from "@/features/members/api";
 import { AddonServiceDrawer } from "@/features/members/components/AddonServiceDrawer";
+import { RenewDrawer } from "@/features/subscriptions/components/RenewDrawer";
 import { paginationProps, useAddAction, useListState, useUrlEnum } from "@/hooks/use-list-state";
 import { formatDate } from "@/lib/format";
 import { notify } from "@/lib/notify";
-import { cn, humanize } from "@/lib/utils";
-import { useCan } from "@/stores/auth-store";
+import { cn, humanize, openWhatsApp } from "@/lib/utils";
+import { useDeskSettings } from "@/features/settings/api";
+import { useAuthStore, useCan } from "@/stores/auth-store";
+import { MemberReferralsDrawer } from "@/features/referrals/components/MemberReferralsDrawer";
+import { useWriteAccess } from "@/hooks/use-write-access";
 import { useBranchStore } from "@/stores/branch-store";
 import { GENDERS, type Gender } from "@/types/enums";
 import type { Member } from "@/types/member";
@@ -27,8 +31,13 @@ const TAB_LABEL: Record<MemberFilter, string> = {
   all: "All members",
   active: "Active",
   expiring: "Expiring soon",
+  absent: "Not coming",
   inactive: "Expired / inactive",
 };
+
+/** "Never came" / "12 days ago". */
+const awayFor = (m: Member) => (m.last_visit_date == null ? "Never came" : m.days_since_visit === 0 ? "Today"
+  : `${m.days_since_visit} day${m.days_since_visit === 1 ? "" : "s"} ago`);
 
 const sortKey = (key: MemberSortKey) => key;
 
@@ -42,12 +51,19 @@ export function MembersPage() {
   const [gender, setGender] = useState<Gender | "">("");
   const [joined, setJoined] = useState({ from: "", to: "" });
   const [addonFor, setAddonFor] = useState<Member | null>(null);
+  const [renewFor, setRenewFor] = useState<Member | null>(null);
+  const [treeFor, setTreeFor] = useState<string | null>(null);
+  const canTree = useCan("referral:list");
 
-  const canCreate = useCan("member:create");
-  const canUpdate = useCan("member:update");
-  const canDelete = useCan("member:delete");
-  const canEnroll = useCan("subscription:create");
+  // "All Branches" is read-only: the controls stay visible but greyed out (a branch must be picked to write).
+  const create = useWriteAccess("member:create");
+  const update = useWriteAccess("member:update");
+  const del = useWriteAccess("member:delete");
+  const enroll = useWriteAccess("subscription:create");
+  const canCreate = create.allowed;
   const invalidate = useInvalidateMembers();
+  const gymName = useAuthStore((s) => s.me?.user.organization_name) ?? "the gym";
+  const desk = useDeskSettings();
 
   const { setPage } = list;
   // Tab / filter changes restart from page 1.
@@ -93,8 +109,16 @@ export function MembersPage() {
       ) },
     { id: "plan", header: "Plan", meta: { width: "170px" },
       cell: ({ row }) => row.original.current_plan_name ?? <span className="text-muted">No plan</span> },
-    { accessorKey: "joining_date", header: "Joined", meta: { width: "120px", sortKey: sortKey("joining_date") },
-      cell: ({ row }) => formatDate(row.original.joining_date) },
+    tab === "absent"
+      ? { accessorKey: "last_visit_date", header: "Last visit", meta: { width: "140px", sortKey: sortKey("last_visit") },
+        cell: ({ row }) => (
+          <div className="whitespace-nowrap">
+            <div className="text-ink">{row.original.last_visit_date ? formatDate(row.original.last_visit_date) : "—"}</div>
+            <div className="text-xs font-semibold text-danger">{awayFor(row.original)}</div>
+          </div>
+        ) }
+      : { accessorKey: "joining_date", header: "Joined", meta: { width: "120px", sortKey: sortKey("joining_date") },
+        cell: ({ row }) => formatDate(row.original.joining_date) },
     { accessorKey: "expiry_date", header: "Expiry", meta: { width: "120px", sortKey: sortKey("expiry_date") },
       cell: ({ row }) => {
         const m = row.original;
@@ -108,20 +132,43 @@ export function MembersPage() {
     { accessorKey: "membership_state", header: "Status", meta: { width: "120px" },
       cell: ({ row }) => <StatusBadge value={row.original.membership_state} /> },
     {
-      id: "actions", header: "Actions", meta: { width: "210px" },
+      id: "actions", header: "Actions", meta: { width: "250px" },
       cell: ({ row }) => {
         const m = row.original;
         return (
           <ActionGroup>
-            {canEnroll && (
-              <button type="button" className="btn-status-action btn-grey" onClick={() => setAddonFor(m)}>
-                Add service
+            {tab === "absent" && (
+              <button type="button" className="btn-status-action btn-grey inline-flex items-center gap-1"
+                title="Check on them over WhatsApp"
+                onClick={() => openWhatsApp(m.phone, `Hi ${m.name}, we've missed you at ${gymName}! `
+                  + "Hope all is well. Your membership is still running, come back soon. Anything we can help with?")}>
+                <Icon name="whatsapp" className="h-3.5 w-3.5" />Check in
               </button>
             )}
+            {enroll.show && tab !== "absent" && (
+              <span title={enroll.reason} className="inline-flex">
+                <button type="button" className="btn-status-action btn-grey disabled:pointer-events-none disabled:opacity-40"
+                  disabled={enroll.disabled} onClick={() => setAddonFor(m)}>
+                  Add service
+                </button>
+              </span>
+            )}
+            {enroll.show && (
+              <ActionIcon kind="renew" title={m.current_plan_name ? "Renew / Upgrade plan" : "Add a plan"}
+                disabled={enroll.disabled} disabledReason={enroll.reason} onClick={() => setRenewFor(m)} />
+            )}
+            {canTree && (
+              <ActionIcon kind="tree" title={`Referrals (${m.referral_count})`}
+                disabled={m.referral_count === 0} disabledReason="Hasn't referred anyone yet"
+                onClick={() => setTreeFor(m.id)} />
+            )}
             <ActionIcon kind="view" onClick={() => navigate(`/members/${m.id}`)} />
-            {canUpdate && <ActionIcon kind="edit" onClick={() => navigate(`/members/${m.id}/edit`)} />}
-            {canDelete && (
-              <ActionIcon kind="delete" onClick={async () => {
+            {update.show && (
+              <ActionIcon kind="edit" disabled={update.disabled} disabledReason={update.reason}
+                onClick={() => navigate(`/members/${m.id}/edit`)} />
+            )}
+            {del.show && (
+              <ActionIcon kind="delete" disabled={del.disabled} disabledReason={del.reason} onClick={async () => {
                 if (await confirm(`Delete ${m.name}?`)) remove.mutate(m.id);
               }} />
             )}
@@ -129,7 +176,7 @@ export function MembersPage() {
         );
       },
     },
-  ], [canEnroll, canUpdate, canDelete, remove, navigate]);
+  ], [enroll, update, del, remove, navigate, tab, gymName, canTree]);
 
   const active: ActiveFilter[] = [];
   if (planId) active.push({ label: `Plan: ${planOptions.find((p) => p.value === planId)?.label ?? "…"}`, onRemove: () => setPlanId("") });
@@ -149,10 +196,13 @@ export function MembersPage() {
       <PageHeader
         title="Members"
         subtitle="Member profiles, memberships and add-on services"
-        actions={canCreate && (
-          <Button icon={<Icon name="plus" className="h-4 w-4" />} onClick={() => navigate("/members/new")}>
-            Add member
-          </Button>
+        actions={create.show && (
+          <span title={create.reason}>
+            <Button icon={<Icon name="plus" className="h-4 w-4" />} disabled={create.disabled}
+              onClick={() => navigate("/members/new")}>
+              Add member
+            </Button>
+          </span>
         )}
       />
 
@@ -167,8 +217,11 @@ export function MembersPage() {
           m.membership_state === "EXPIRED" ? ROW_MARKER.expired
             : m.membership_state === "EXPIRING" ? ROW_MARKER.nearExpiry : undefined}
         emptyIcon="users"
-        emptyMessage={filtered ? "No members match these filters" : "No members yet"}
-        emptyHint={filtered ? "Try a different search or clear the filters." : canCreate ? "Add your first member to get started." : undefined}
+        emptyMessage={filtered ? "No members match these filters"
+          : tab === "absent" ? "Everyone with a running membership came recently" : "No members yet"}
+        emptyHint={filtered ? "Try a different search or clear the filters."
+          : tab === "absent" ? `Members show here after ${desk.data?.absent_alert_days ?? 7} days without a visit (Configuration).`
+            : canCreate ? "Add your first member to get started." : undefined}
         sorting={list.sorting}
         pagination={paginationProps(list, data?.total)}
         toolbar={
@@ -193,6 +246,12 @@ export function MembersPage() {
       />
 
       {addonFor && <AddonServiceDrawer member={addonFor} onClose={() => setAddonFor(null)} />}
+      {treeFor && <MemberReferralsDrawer memberId={treeFor} onClose={() => setTreeFor(null)} />}
+      {renewFor && (
+        <RenewDrawer onClose={() => setRenewFor(null)}
+          row={{ member_id: renewFor.id, member_name: renewFor.name, registration_id: renewFor.registration_id,
+            plan_name: renewFor.current_plan_name ?? "No plan" }} />
+      )}
     </div>
   );
 }

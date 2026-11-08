@@ -26,9 +26,17 @@ export interface Member {
   current_plan_id: string | null;
   current_plan_name: string | null;
   expiry_date: string | null;
+  /** Last check-in (null = never came). */
+  last_visit_date: string | null;
+  days_since_visit: number | null;
+  /** The member who referred them. */
+  referred_by_id: string | null;
+  referred_by_name: string | null;
+  /** Members this one referred (0 = no referral tree). */
+  referral_count: number;
   created_at: string;
   updated_at: string;
 }
 
 export type MemberInput = Partial<Omit<Member, "id" | "branch_id" | "registration_id" | "membership_state" |
-  "current_plan_id" | "current_plan_name" | "expiry_date" | "created_at" | "updated_at">>;
+  "current_plan_id" | "current_plan_name" | "expiry_date" | "last_visit_date" | "days_since_visit" | "referred_by_name" | "referral_count" | "created_at" | "updated_at">>;

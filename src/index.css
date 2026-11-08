@@ -428,6 +428,16 @@
   .action-icon.view {
     @apply hover:border-info hover:bg-info-soft hover:text-info;
   }
+  /* Renew / Upgrade: the main membership action, so it stays coloured (not only on hover). */
+  .action-icon.renew {
+    @apply border-line-accent bg-accent-light text-accent hover:border-accent;
+  }
+  .action-icon.tree {
+    @apply hover:border-info hover:bg-info-soft hover:text-info;
+  }
+  .action-icon.trial {
+    @apply hover:border-line-accent hover:bg-accent-light hover:text-accent;
+  }
   .action-icon.edit {
     @apply hover:border-success hover:bg-success-soft hover:text-success;
   }

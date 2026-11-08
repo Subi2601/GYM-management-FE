@@ -7,11 +7,12 @@ import type { Paginated, TabCounts } from "@/types/api";
 import type { Gender } from "@/types/enums";
 import type { Member, MemberInput } from "@/types/member";
 
-export const MEMBER_FILTERS = ["all", "active", "expiring", "inactive"] as const;
+export const MEMBER_FILTERS = ["all", "active", "expiring", "absent", "inactive"] as const;
 export type MemberFilter = (typeof MEMBER_FILTERS)[number];
 
 /** Server sort keys of GET /members. */
-export type MemberSortKey = "registration_id" | "name" | "phone" | "joining_date" | "expiry_date" | "created_at";
+export type MemberSortKey = "registration_id" | "name" | "phone" | "joining_date" | "expiry_date" | "last_visit"
+  | "created_at";
 
 export interface MemberListQuery {
   page: number;

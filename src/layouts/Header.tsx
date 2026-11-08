@@ -84,10 +84,14 @@ export function Header({ onToggleSidebar }: { onToggleSidebar: () => void }) {
               <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
                 <span className={cn("rounded-md px-2 py-0.5 text-[11px] font-bold",
                   isManager ? "bg-accent-light text-accent" : "bg-hover text-secondary-grey")}>
-                  {humanize(me.user.role)}
+                  {me.user.role_name ?? humanize(me.user.role)}
                 </span>
                 {me.user.organization_name && (
                   <span className="truncate text-xs font-semibold text-secondary-grey">{me.user.organization_name}</span>
+                )}
+                {me.user.organization_code && (
+                  <span className="rounded-md bg-subtle px-2 py-0.5 font-mono text-[11px] font-bold text-secondary-grey"
+                    title="Gym ID">ID {me.user.organization_code}</span>
                 )}
               </div>
               <div className="h-px bg-line" />

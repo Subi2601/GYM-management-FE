@@ -26,6 +26,13 @@ const MembersPage = page(() => import("@/features/members/pages/MembersPage"), "
 const MemberFormPage = page(() => import("@/features/members/pages/MemberFormPage"), "MemberFormPage");
 const LeadsPage = page(() => import("@/features/leads/pages/LeadsPage"), "LeadsPage");
 const PlansPage = page(() => import("@/features/plans/pages/PlansPage"), "PlansPage");
+const OffersPage = page(() => import("@/features/offers/pages/OffersPage"), "OffersPage");
+const RolesPage = page(() => import("@/features/roles/pages/RolesPage"), "RolesPage");
+const SettingsPage = page(() => import("@/features/settings/pages/SettingsPage"), "SettingsPage");
+const GymSettingsPage = page(() => import("@/features/gym/pages/GymSettingsPage"), "GymSettingsPage");
+const ReferralsPage = page(() => import("@/features/referrals/pages/ReferralsPage"), "ReferralsPage");
+const RenewalsPage = page(() => import("@/features/renewals/pages/RenewalsPage"), "RenewalsPage");
+const PublicInvoicePage = page(() => import("@/features/payments/pages/InvoicePage"), "PublicInvoicePage");
 const SubscriptionsPage = page(() => import("@/features/subscriptions/pages/SubscriptionsPage"), "SubscriptionsPage");
 const PaymentsPage = page(() => import("@/features/payments/pages/PaymentsPage"), "PaymentsPage");
 const InvoicePage = page(() => import("@/features/payments/pages/InvoicePage"), "InvoicePage");
@@ -35,6 +42,7 @@ const EmployeeFormPage = page(() => import("@/features/staff/pages/EmployeeFormP
 const EmployeeDetailsPage = page(() => import("@/features/staff/pages/EmployeeDetailsPage"), "EmployeeDetailsPage");
 const AttendancePage = page(() => import("@/features/attendance/pages/AttendancePage"), "AttendancePage");
 const AttendanceQrPage = page(() => import("@/features/attendance/pages/AttendanceQrPage"), "AttendanceQrPage");
+const EnquiryFormPage = page(() => import("@/features/leads/pages/EnquiryFormPage"), "EnquiryFormPage");
 const CheckinPage = page(() => import("@/features/attendance/pages/CheckinPage"), "CheckinPage");
 const SalaryPage = page(() => import("@/features/salary/pages/SalaryPage"), "SalaryPage");
 const DietPlansPage = page(() => import("@/features/diet/pages/DietPlansPage"), "DietPlansPage");
@@ -75,6 +83,10 @@ export default function App() {
               <Route path="/session-expired" element={<SessionExpiredPage />} />
               {/* Opened from the branch QR posters on members' / staff phones — no login. */}
               <Route path="/checkin/:token" element={<Suspense fallback={<PageLoader />}><CheckinPage /></Suspense>} />
+              {/* Invoice link sent to the member on WhatsApp — no login, the signed token is the permission. */}
+              {/* Public enquiry form (branch link / QR poster) — no login; a submit becomes a lead. */}
+              <Route path="/enquiry/:token" element={<Suspense fallback={<PageLoader />}><EnquiryFormPage /></Suspense>} />
+              <Route path="/i/:token" element={<Suspense fallback={<PageLoader />}><PublicInvoicePage /></Suspense>} />
               <Route path="/branch-selection" element={<RequireAuth><BranchSelectionPage /></RequireAuth>} />
               {/* Invoice prints full-width without the app chrome, as before. */}
               <Route path="/invoice/:paymentId" element={
@@ -88,7 +100,14 @@ export default function App() {
                 <Route path="members/:id" element={<Guarded permission="member:list"><MemberFormPage /></Guarded>} />
                 <Route path="members/:id/edit" element={<Guarded permission="member:update"><MemberFormPage /></Guarded>} />
                 <Route path="leads" element={<Guarded permission="lead:list"><LeadsPage /></Guarded>} />
+                <Route path="referrals" element={<Guarded permission="referral:list"><ReferralsPage /></Guarded>} />
                 <Route path="plans" element={<Guarded permission="plan:list"><PlansPage /></Guarded>} />
+                <Route path="offers" element={<Guarded permission="offer:list"><OffersPage /></Guarded>} />
+                <Route path="roles" element={<Guarded permission="role:list"><RolesPage /></Guarded>} />
+                <Route path="configuration" element={<Guarded permission="setting:manage"><SettingsPage /></Guarded>} />
+                <Route path="settings" element={<Navigate to="/configuration" replace />} />
+                <Route path="gym-settings" element={<Guarded permission="gym:manage"><GymSettingsPage /></Guarded>} />
+                <Route path="renewals" element={<Guarded permission="subscription:list"><RenewalsPage /></Guarded>} />
                 <Route path="subscriptions" element={<Guarded permission="subscription:list"><SubscriptionsPage /></Guarded>} />
                 <Route path="payments" element={<Guarded permission="payment:list"><PaymentsPage /></Guarded>} />
                 <Route path="personal-training" element={<Guarded permission="pt:list"><PersonalTrainingPage /></Guarded>} />

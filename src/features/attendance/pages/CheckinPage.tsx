@@ -131,7 +131,8 @@ export function CheckinPage() {
                 <Result tone="success" icon={outcome.result.direction === "IN" ? "logIn" : "logOut"}
                   title={`${outcome.result.direction === "IN" ? "Checked in" : "Checked out"} · ${formatClock(outcome.result.time)}`}
                   message={outcome.result.direction === "IN"
-                    ? `Welcome, ${outcome.result.name}.${outcome.result.late ? " You're marked late today." : " Have a great workout!"}`
+                    ? `Welcome, ${outcome.result.name}.${outcome.result.half_day ? " You're marked half day (late) today."
+                      : outcome.result.late ? " You're marked late today." : " Have a great workout!"}`
                     : `You were in for ${formatDuration(outcome.result.duration_minutes)}. See you next time, ${outcome.result.name}.`} />
               )}
 

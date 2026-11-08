@@ -7,9 +7,7 @@ export interface NavItem {
   label: string;
   icon: IconName;
   permission: string;
-  to?: string;
-  /** Opens the Manage Branches modal instead of navigating. */
-  action?: "manage-branches";
+  to: string;
 }
 
 export type NavGroup = "Overview" | "Clients" | "Team" | "Finance" | "Settings";
@@ -25,7 +23,9 @@ export const NAV: NavItem[] = [
   // Client journey order: enquiry → member → membership → services.
   { key: "leads", group: "Clients", label: "Leads", icon: "userCheck", to: "/leads", permission: "lead:list" },
   { key: "members", group: "Clients", label: "Members", icon: "users", to: "/members", permission: "member:list" },
+  { key: "referrals", group: "Clients", label: "Referrals", icon: "tree", to: "/referrals", permission: "referral:list" },
   { key: "subscriptions", group: "Clients", label: "Subscriptions", icon: "repeat", to: "/subscriptions", permission: "subscription:list" },
+  { key: "renewals", group: "Clients", label: "Renewals", icon: "clock", to: "/renewals", permission: "subscription:list" },
   { key: "pt", group: "Clients", label: "Personal Training", icon: "dumbbell", to: "/personal-training", permission: "pt:list" },
   { key: "diet", group: "Clients", label: "Diet Plans", icon: "cup", to: "/diet-plans", permission: "diet:list" },
   { key: "staff", group: "Team", label: "Staff", icon: "user", to: "/staff", permission: "employee:list" },
@@ -33,7 +33,10 @@ export const NAV: NavItem[] = [
   { key: "salary", group: "Team", label: "Payroll", icon: "wallet", to: "/salary", permission: "salary:list" },
   { key: "payments", group: "Finance", label: "Payments", icon: "card", to: "/payments", permission: "payment:list" },
   { key: "plans", group: "Finance", label: "Plans & Pricing", icon: "tag", to: "/plans", permission: "plan:list" },
-  { key: "branches", group: "Settings", label: "Branches", icon: "building", action: "manage-branches", permission: "branch:list" },
+  { key: "offers", group: "Finance", label: "Offers", icon: "flame", to: "/offers", permission: "offer:list" },
+  { key: "gym-settings", group: "Settings", label: "Gym Settings", icon: "building", to: "/gym-settings", permission: "gym:manage" },
+  { key: "roles", group: "Settings", label: "Roles & Access", icon: "shield", to: "/roles", permission: "role:list" },
+  { key: "configuration", group: "Settings", label: "Configuration", icon: "sliders", to: "/configuration", permission: "setting:manage" },
 ];
 
 /** Label of the screen at `pathname` (header title); falls back to the app name. */

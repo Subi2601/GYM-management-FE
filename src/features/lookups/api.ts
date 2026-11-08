@@ -26,11 +26,16 @@ export function useMemberLookup(enabled = true) {
   });
 }
 
-export function usePlanLookup(type?: PlanType, enabled = true) {
+/**
+ * Plans of the branch in tariff order. `billing` = only plans the desk may sell (hidden plans / categories left
+ * out) — use it on every billing screen; filters and history keep every plan.
+ */
+export function usePlanLookup(type?: PlanType, enabled = true, billing = false) {
   const branch = useBranchStore((s) => s.selectedBranchId);
   return useQuery({
-    queryKey: lookupKeys.plans(branch, type),
-    queryFn: async () => (await apiGet<Paginated<Plan>>("/plans", { ...ALL_ROWS, type })).data.items,
+    queryKey: [...lookupKeys.plans(branch, type), billing] as const,
+    queryFn: async () => (await apiGet<Paginated<Plan>>("/plans", { ...ALL_ROWS, type,
+      active_only: billing || undefined })).data.items,
     enabled,
   });
 }

@@ -9,6 +9,8 @@ import { Field, Input, Select } from "@/components/ui/Field";
 import { Drawer } from "@/components/ui/Modal";
 import { FormDivider, GRID_2 } from "@/components/ui/Section";
 import { openInvoice, subscriptionApi, useInvalidateBilling } from "@/features/subscriptions/api";
+import { usePlanLookup } from "@/features/lookups/api";
+import { OfferSelect } from "@/features/offers/components/OfferSelect";
 import { balanceOf, billingShape, netPayable, PAYMENT_MODE_LABEL, refineBilling, round2,
   toEnrollPayment } from "@/features/subscriptions/lib/billing";
 import { formatDate, formatINR, todayISO } from "@/lib/format";
@@ -16,7 +18,6 @@ import { notify } from "@/lib/notify";
 import { PAYMENT_MODES } from "@/types/enums";
 import type { SubscriptionDetail } from "@/types/subscription";
 
-const DISCOUNT_REASONS = ["Referral Offer", "Special Waiver", "Early Bird", "Other"];
 const FORM_ID = "complete-payment-form";
 
 const schema = z.object(billingShape).superRefine(refineBilling);
@@ -26,14 +27,16 @@ type FormValues = z.infer<typeof schema>;
 export function CompletePaymentDrawer({ detail, onClose }: { detail: SubscriptionDetail; onClose: () => void }) {
   const invalidateBilling = useInvalidateBilling();
   const gross = round2(detail.plans.reduce((s, p) => s + p.price, 0));
+  // Plan → category, so the offer dropdown lists only offers that fit these plans.
+  const allPlans = usePlanLookup();
+  const planCategory = new Map((allPlans.data ?? []).map((p) => [p.id, p.category_id]));
   const storedDiscount = detail.discount_amount;
-  const reasons = detail.discount_reason && !DISCOUNT_REASONS.includes(detail.discount_reason)
-    ? [detail.discount_reason, ...DISCOUNT_REASONS] : DISCOUNT_REASONS;
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       amount: gross,
+      offer_id: "",
       discount_amount: storedDiscount > 0 ? String(storedDiscount) : "",
       discount_reason: detail.discount_reason ?? "",
       paid_amount: String(netPayable(gross, String(storedDiscount))),
@@ -42,6 +45,7 @@ export function CompletePaymentDrawer({ detail, onClose }: { detail: Subscriptio
     },
   });
   const discount = watch("discount_amount");
+  const offerId = watch("offer_id");
   const paid = watch("paid_amount");
   const balance = balanceOf(gross, discount, paid);
 
@@ -66,6 +70,7 @@ export function CompletePaymentDrawer({ detail, onClose }: { detail: Subscriptio
     const p = toEnrollPayment(v);
     pay.mutate({
       subscription_ids: detail.plans.map((l) => l.subscription_id),
+      offer_id: p.offer_id,
       discount_amount: p.discount_amount,
       discount_reason: p.discount_reason,
       paid_amount: p.paid_amount,
@@ -107,16 +112,14 @@ export function CompletePaymentDrawer({ detail, onClose }: { detail: Subscriptio
 
         <FormDivider>Payment</FormDivider>
         <div className={GRID_2}>
-          <Field label="Discount (₹)" htmlFor="cp-discount" error={errors.discount_amount?.message}>
-            <Input id="cp-discount" type="number" min={0} step="0.01" placeholder="e.g. 500" invalid={!!errors.discount_amount}
-              {...register("discount_amount")} />
-          </Field>
-          <Field label="Offer / reason" htmlFor="cp-reason">
-            <Select id="cp-reason" {...register("discount_reason")}>
-              <option value="">No discount</option>
-              {reasons.map((r) => <option key={r} value={r}>{r}</option>)}
-            </Select>
-          </Field>
+          <OfferSelect id="cp-offer" lines={detail.plans.map((l) => ({ categoryId: planCategory.get(l.plan_id), amount: l.price }))} value={offerId} className="md:col-span-2"
+            noneLabel={storedDiscount > 0 ? `Keep current discount (${formatINR(storedDiscount)})` : "No offer"}
+            setField={(n, val) => {
+              // Back to "no offer" restores the discount captured with the subscription.
+              if (n === "discount_amount" && val === "" && storedDiscount > 0) val = String(storedDiscount);
+              if (n === "discount_reason" && val === "") val = detail.discount_reason ?? "";
+              setValue(n, val);
+            }} />
           <Field label="Amount paid now (₹)" htmlFor="cp-paid" required error={errors.paid_amount?.message}
             hint="Lower it to record a part payment">
             <Input id="cp-paid" type="number" min={0} step="0.01" placeholder="0.00" invalid={!!errors.paid_amount}

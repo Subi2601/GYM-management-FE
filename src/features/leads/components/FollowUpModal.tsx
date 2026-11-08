@@ -1,14 +1,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { Field, Select, Textarea } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { GRID_2 } from "@/components/ui/Section";
 import { leadApi, useInvalidateLeads } from "@/features/leads/api";
+import { DateWithDays } from "@/features/leads/components/DateWithDays";
 import { addDaysISO, todayISO } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { humanize } from "@/lib/utils";
@@ -37,7 +38,7 @@ function defaults(lead: Lead | null): FormValues {
 /** "Add follow-up" → POST /leads/{id}/follow-up (appends a dated note). */
 export function FollowUpModal({ lead, onClose }: { lead: Lead | null; onClose: () => void }) {
   const invalidate = useInvalidateLeads();
-  const { register, handleSubmit, reset, formState: { errors, isValid } } =
+  const { register, control, handleSubmit, reset, formState: { errors, isValid } } =
     useForm<FormValues>({ resolver: zodResolver(schema), mode: "onChange", defaultValues: defaults(lead) });
 
   useEffect(() => {
@@ -74,8 +75,12 @@ export function FollowUpModal({ lead, onClose }: { lead: Lead | null; onClose: (
               {LEAD_STATUSES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
             </Select>
           </Field>
-          <Field label="Next follow-up" htmlFor="fu-date" error={errors.next_follow_up_date?.message} required>
-            <Input id="fu-date" type="date" invalid={!!errors.next_follow_up_date} {...register("next_follow_up_date")} />
+          <Field label="Next follow-up" htmlFor="fu-date" error={errors.next_follow_up_date?.message} required
+            hint="Date, or days from today" className="md:col-span-2">
+            <Controller name="next_follow_up_date" control={control} render={({ field }) => (
+              <DateWithDays id="fu-date" value={field.value} onChange={field.onChange} onBlur={field.onBlur}
+                invalid={!!errors.next_follow_up_date} />
+            )} />
           </Field>
           <Field label="Follow-up notes" htmlFor="fu-notes" error={errors.notes?.message} required className="md:col-span-2">
             <Textarea id="fu-notes" rows={4} placeholder="What was discussed? Any objections or next steps…"

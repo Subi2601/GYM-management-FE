@@ -7,6 +7,7 @@ import { Icon } from "@/components/ui/Icon";
 import { DateRangeFilter, FilterSelect, ListToolbar, type ActiveFilter } from "@/components/ui/ListToolbar";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
+import { RefundsDrawer } from "@/features/payments/components/RefundsDrawer";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { buildCollectionReportHtml, escapeHtml } from "@/features/payments/collection-report";
 import { paymentApi, usePayments, usePaymentStats } from "@/features/payments/api";
@@ -41,6 +42,7 @@ export function PaymentsPage() {
   const [balance, setBalance] = useState<BalanceFilter>("");
   const [range, setRange] = useState({ from: "", to: "" });
   const [exporting, setExporting] = useState(false);
+  const [refundsOpen, setRefundsOpen] = useState(false);
 
   const { setPage } = list;
   // Filter changes restart from page 1.
@@ -186,14 +188,20 @@ export function PaymentsPage() {
               </>
             }
             actions={
-              <Button variant="secondary" icon={<Icon name="download" className="h-4 w-4" />} loading={exporting} onClick={exportReport}>
-                Download report
-              </Button>
+              <>
+                <Button variant="secondary" icon={<Icon name="refresh" className="h-4 w-4" />} onClick={() => setRefundsOpen(true)}>
+                  Refunds
+                </Button>
+                <Button variant="secondary" icon={<Icon name="download" className="h-4 w-4" />} loading={exporting} onClick={exportReport}>
+                  Download report
+                </Button>
+              </>
             }
             active={active}
           />
         }
       />
+      {refundsOpen && <RefundsDrawer onClose={() => setRefundsOpen(false)} />}
     </div>
   );
 }
@@ -220,10 +228,13 @@ function CollectionStats({ stats, loading }: { stats: PaymentStats | undefined; 
           </span>
         } />
       <StatCard label="This month" value={v(stats?.this_month)} icon="calendar" tone="accent"
-        hint={`Last month ${v(stats?.last_month)}`} />
+        hint={stats?.refunds_this_month
+          ? `Refunded ${v(stats.refunds_this_month)} · net ${v(stats.this_month - stats.refunds_this_month)}`
+          : `Last month ${v(stats?.last_month)}`} />
       <StatCard label="Last 12 months" value={v(stats?.last_12_months)} icon="trending" tone="info"
         hint={`Last 6 months ${v(stats?.last_6_months)}`} />
-      <StatCard label="Total overall" value={v(stats?.total)} icon="money" tone="neutral" hint="All-time collections" />
+      <StatCard label="Total overall" value={v(stats?.total)} icon="money" tone="neutral"
+        hint={stats?.refunds_total ? `Refunds ${v(stats.refunds_total)} · net ${v(stats.total - stats.refunds_total)}` : "All-time collections"} />
     </div>
   );
 }

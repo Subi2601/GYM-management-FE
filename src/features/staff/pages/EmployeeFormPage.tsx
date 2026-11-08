@@ -1,22 +1,29 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { confirm } from "@/components/ui/ConfirmDialog";
+import { Checkbox, Field, Input, READONLY_INPUT, Select, Textarea } from "@/components/ui/Field";
 import { FormPage } from "@/components/ui/FormPage";
 import { Icon } from "@/components/ui/Icon";
 import { PageLoader } from "@/components/ui/Loaders";
 import { GRID_2, GRID_3, Section } from "@/components/ui/Section";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { staffApi, staffKeys } from "@/features/staff/api";
+import { LoginCredentialsModal, type Credentials } from "@/features/staff/components/LoginCredentialsModal";
+import { PasswordField } from "@/features/staff/components/PasswordField";
 import { FORM_STATUSES, makeEmployeeSchema, toEmployeeBody, toEmployeeValues,
   type EmployeeFormKey, type EmployeeFormValues } from "@/features/staff/lib/employee-form";
+import { generatePassword, NO_LOGIN_ROLES, passwordField } from "@/features/staff/lib/staff-login";
+import { defaultRoleCode, useAssignableRoles } from "@/features/roles/api";
+import { RoleSelect } from "@/features/roles/components/RoleSelect";
+import { formatDateTime } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { humanize } from "@/lib/utils";
-import { useCan } from "@/stores/auth-store";
+import { useAuthStore, useCan } from "@/stores/auth-store";
 import { useBranchStore } from "@/stores/branch-store";
 import type { Employee, EmployeeInput, EmployeeUpdate } from "@/types/employee";
 import { EMPLOYEE_ROLES } from "@/types/enums";
@@ -34,10 +41,11 @@ export function EmployeeFormPage() {
     enabled: !!id,
   });
 
-  if (branch === null) {
+  // Adding works from "All Branches" (the form asks for the branch); editing needs the employee's branch selected.
+  if (id && branch === null) {
     return (
-      <FormPage title={id ? "Edit employee" : "New employee"} backTo="/staff" backLabel="Staff">
-        <p className="text-sm text-muted">Select a branch to add or edit staff.</p>
+      <FormPage title="Edit employee" backTo="/staff" backLabel="Staff">
+        <p className="text-sm text-muted">Select a branch to edit staff.</p>
       </FormPage>
     );
   }
@@ -68,19 +76,109 @@ function EmployeeForm({ employee }: { employee: Employee | null }) {
   const schema = useMemo(() => makeEmployeeSchema(employee), [employee]);
   const toList = () => navigate("/staff");
 
-  const { register, handleSubmit, setError, formState: { errors, dirtyFields } } = useForm<EmployeeFormValues>({
+  const { register, handleSubmit, setError, watch, formState: { errors, dirtyFields } } = useForm<EmployeeFormValues>({
     resolver: zodResolver(schema),
     mode: "onTouched",
     defaultValues: toEmployeeValues(employee),
   });
 
+  // ── branch (new staff): picked when "All Branches" is selected, otherwise fixed to the selected branch ──
+  const me = useAuthStore((s) => s.me);
+  const branch = useBranchStore((s) => s.selectedBranchId);
+  const [branchId, setBranchId] = useState(branch ?? "");
+  const [branchError, setBranchError] = useState<string>();
+  const branchName = me?.branches.find((b) => b.id === (branch ?? branchId))?.branch_name;
+
+  // ── app login ──
+  // Login ID = the staff email; access = a gym role (Roles & Access) picked here, defaulting from the staff role.
+  // Add: optional new login. Edit: give one, reset the password (empty = keep), or switch it off.
+  const canLogin = useCan("employee:login");
+  const existing = useQuery({
+    queryKey: staffKeys.login(branch, employee?.id ?? ""),
+    queryFn: async () => (await staffApi.login(employee!.id)).data,
+    enabled: canLogin && !!employee,
+  });
+  const current = existing.data;            // edit only
+  const hasLogin = !!current?.has_login;
+  const [login, setLogin] = useState({ on: false, password: employee ? "" : generatePassword() });
+  const [loginError, setLoginError] = useState<string>();
+  const [creds, setCreds] = useState<Credentials | null>(null);
+  const staffRole = watch("role");
+  const assignable = useAssignableRoles(canLogin);
+  const [roleId, setRoleId] = useState("");
+  const [roleTouched, setRoleTouched] = useState(false);
+  // Edit: the login's role. Add: follow the staff role (Manager / Staff) until the owner picks one.
+  useEffect(() => {
+    if (roleTouched) return;
+    if (current?.has_login && current.role_id) setRoleId(current.role_id);
+    else {
+      const code = defaultRoleCode(staffRole);
+      const fallback = assignable.data?.find((r) => r.code === code) ?? assignable.data?.[assignable.data.length - 1];
+      setRoleId(fallback?.id ?? "");
+    }
+  }, [roleTouched, current, staffRole, assignable.data]);
+  // Add: desk / trainers usually sign in, cleaners don't — follow the role until the owner flips the switch.
+  // Edit: start from the login as it is.
+  const [loginTouched, setLoginTouched] = useState(false);
+  useEffect(() => {
+    if (loginTouched) return;
+    if (!employee) setLogin((l) => ({ ...l, on: !NO_LOGIN_ROLES.includes(staffRole) }));
+    else if (current) setLogin({ on: current.has_login && current.enabled, password: "" });
+  }, [staffRole, loginTouched, employee, current]);
+  const editLogin = (patch: Partial<typeof login>) => {
+    setLoginTouched(true);
+    setLoginError(undefined);
+    setLogin((l) => {
+      const next = { ...l, ...patch };
+      // Turning on a brand-new login → start with a generated password.
+      if (patch.on && !hasLogin && !next.password) next.password = generatePassword();
+      return next;
+    });
+  };
+
+  /** What the login part of this save must do (null = nothing). */
+  const loginAction = (): "save" | "disable" | null => {
+    if (!canLogin) return null;
+    if (!employee) return login.on ? "save" : null;
+    if (!current) return null;
+    if (login.on) {
+      return !current.has_login || !current.enabled || login.password || (roleId && roleId !== current.role_id)
+        ? "save" : null;
+    }
+    return current.has_login && current.enabled ? "disable" : null;
+  };
+
   const save = useMutation({
-    mutationFn: (req: { id: null; body: EmployeeInput } | { id: string; body: EmployeeUpdate }) =>
-      req.id === null ? staffApi.create(req.body) : staffApi.update(req.id, req.body),
+    mutationFn: async (req: { id: null; body: EmployeeInput } | { id: string; body: EmployeeUpdate | null }) => {
+      if (req.id === null) return (await staffApi.create(req.body, branchId || undefined));
+      return req.body ? staffApi.update(req.id, req.body) : null;   // null = only the login changed
+    },
     onSuccess: async (res) => {
-      notify.success(res.message);
+      if (res) notify.success(res.message);
+      const emp = res?.data ?? employee!;
+      const action = loginAction();
+      let shared = false;
+      try {
+        if (action === "save") {
+          const made = await staffApi.saveLogin(emp.id, { role_id: roleId || null, password: login.password || null },
+            employee ? undefined : branchId || undefined);
+          notify.success(made.message);
+          if (login.password) {
+            setCreds({ name: emp.name, phone: emp.phone, email: made.data.email ?? emp.email ?? "",
+              password: login.password, branch: made.data.branch_name });
+            shared = true;
+          }
+        } else if (action === "disable") {
+          notify.success((await staffApi.disableLogin(emp.id)).message);
+        }
+      } catch (err) {
+        notify.error(err);   // staff saved; the login can be fixed from the details page
+        await qc.invalidateQueries({ queryKey: staffKeys.all });
+        navigate(`/staff/${emp.id}`);
+        return;
+      }
       await qc.invalidateQueries({ queryKey: staffKeys.all });
-      toList();
+      if (!shared) toList();
     },
     onError: (err) => {
       notify.error(err);
@@ -89,10 +187,25 @@ function EmployeeForm({ employee }: { employee: Employee | null }) {
     },
   });
 
-  const onSubmit = (v: EmployeeFormValues) => {
+  const onSubmit = async (v: EmployeeFormValues) => {
     const payload = toEmployeeBody(v);
+    const action = loginAction();
+    if (action === "save" && (login.password || !hasLogin)) {
+      const check = passwordField.safeParse(login.password);
+      if (!check.success) {
+        setLoginError(check.error.issues[0]?.message);
+        return;
+      }
+    }
     if (!employee) {
+      if (!branchId) {
+        setBranchError("Choose the branch this staff member works at");
+        return;
+      }
       save.mutate({ id: null, body: payload });
+      return;
+    }
+    if (action === "disable" && !(await confirm(`Switch off ${employee.name}'s login? They'll be signed out right away.`))) {
       return;
     }
     // Only what the user changed — masked PII the user didn't touch is never echoed back.
@@ -100,11 +213,12 @@ function EmployeeForm({ employee }: { employee: Employee | null }) {
     (Object.keys(dirtyFields) as EmployeeFormKey[]).forEach((k) => {
       if (dirtyFields[k]) Object.assign(changed, { [k]: payload[k] });
     });
-    if (Object.keys(changed).length === 0) {
+    const profileChanged = Object.keys(changed).length > 0;
+    if (!profileChanged && !action) {
       toList();
       return;
     }
-    save.mutate({ id: employee.id, body: changed });
+    save.mutate({ id: employee.id, body: profileChanged ? changed : null });
   };
 
   const shiftError = (from: EmployeeFormKey, to: EmployeeFormKey) => errors[from]?.message ?? errors[to]?.message;
@@ -140,6 +254,22 @@ function EmployeeForm({ employee }: { employee: Employee | null }) {
       <form id={FORM_ID} onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-5">
         <Section title="Personal details" description="Contact information, role and joining date">
           <div className={GRID_3}>
+            {!employee && (
+              <Field label="Branch" htmlFor="emp-branch" required error={branchError}
+                hint={branch ? "Selected in the sidebar" : "Staff and their login belong to this branch"}>
+                {branch ? (
+                  <Select id="emp-branch" value={branch} disabled className={READONLY_INPUT}>
+                    <option value={branch}>{branchName ?? "Current branch"}</option>
+                  </Select>
+                ) : (
+                  <Select id="emp-branch" value={branchId} invalid={!!branchError}
+                    onChange={(e) => { setBranchId(e.target.value); setBranchError(undefined); }}>
+                    <option value="">Select a branch</option>
+                    {(me?.branches ?? []).map((b) => <option key={b.id} value={b.id}>{b.branch_name}</option>)}
+                  </Select>
+                )}
+              </Field>
+            )}
             {text("name", "Full name", { placeholder: "Enter name", maxLength: 120 })}
             {text("phone", "Phone number", { placeholder: "10-digit mobile", inputMode: "numeric", maxLength: 10 })}
             {text("email", "Email", { placeholder: "name@example.com", type: "email", inputMode: "email", maxLength: 150 })}
@@ -210,7 +340,46 @@ function EmployeeForm({ employee }: { employee: Employee | null }) {
             ))}
           </div>
         </Section>
+
+        {canLogin && (!employee || current) && (
+          <Section title="App login"
+            description={hasLogin
+              ? `${current?.enabled ? "Active" : "Switched off"} · last sign-in ${current?.last_login_at ? formatDateTime(current.last_login_at) : "never"}`
+              : "Optional. The owner sets the password and shares it; you can reset it any time."}
+            aside={<Checkbox checked={login.on} onChange={(on) => editLogin({ on })} label={hasLogin ? "Login on" : "Give login"} />}>
+            {login.on ? (
+              <>
+                <div className={GRID_3}>
+                  <Field label={hasLogin ? "New password" : "Password"} htmlFor="emp-login-password" required={!hasLogin}
+                    error={loginError}
+                    hint={hasLogin ? "Leave empty to keep the current password" : "They can change it after signing in"}>
+                    <PasswordField id="emp-login-password" maxLength={72} value={login.password} invalid={!!loginError}
+                      placeholder={hasLogin ? "Type or generate to reset" : ""}
+                      onChange={(e) => editLogin({ password: e.target.value })}
+                      onGenerate={() => editLogin({ password: generatePassword() })} />
+                  </Field>
+                  <Field label="Access (role)" htmlFor="emp-login-role" required
+                    hint={<>What they can do: set on <b>Roles &amp; Access</b>. Defaults from the staff role</>}>
+                    <RoleSelect id="emp-login-role" value={roleId} currentName={current?.role_name}
+                      onChange={(id) => { setRoleTouched(true); setRoleId(id); }} />
+                  </Field>
+                </div>
+                <p className="m-0 mt-3 text-xs text-muted">
+                  Login ID: <b className="text-ink">{watch("email") || "the email above"}</b>
+                  {" · "}Branch: <b className="text-ink">{current?.branch_name ?? branchName ?? "the branch above"}</b> only
+                </p>
+              </>
+            ) : (
+              <p className="m-0 text-[13px] text-muted">
+                {hasLogin && current?.enabled
+                  ? `Saving will switch off ${watch("name") || "this"}'s login and sign them out.`
+                  : `No login: ${watch("name") || "this staff member"} won't sign in to the app. Turn it on for trainers and front-desk staff.`}
+              </p>
+            )}
+          </Section>
+        )}
       </form>
+      {creds && <LoginCredentialsModal creds={creds} onClose={() => { setCreds(null); toList(); }} />}
     </FormPage>
   );
 }

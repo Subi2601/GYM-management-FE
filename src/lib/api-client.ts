@@ -107,13 +107,18 @@ export async function apiGet<T>(url: string, params?: object): Promise<Envelope<
   return response.data;
 }
 
-export async function apiPost<T>(url: string, body?: object, params?: object): Promise<Envelope<T>> {
-  const response = await api.post<Envelope<T>>(url, body, { params });
+/** Request headers that send one call to a specific branch instead of the selected one (owner picking a branch). */
+export const forBranch = (branchId: string | null | undefined): Record<string, string> | undefined =>
+  branchId ? { "X-Branch-ID": branchId } : undefined;
+
+export async function apiPost<T>(url: string, body?: object, params?: object,
+  headers?: Record<string, string>): Promise<Envelope<T>> {
+  const response = await api.post<Envelope<T>>(url, body, { params, headers });
   return response.data;
 }
 
-export async function apiPut<T>(url: string, body?: object): Promise<Envelope<T>> {
-  const response = await api.put<Envelope<T>>(url, body);
+export async function apiPut<T>(url: string, body?: object, headers?: Record<string, string>): Promise<Envelope<T>> {
+  const response = await api.put<Envelope<T>>(url, body, { headers });
   return response.data;
 }
 

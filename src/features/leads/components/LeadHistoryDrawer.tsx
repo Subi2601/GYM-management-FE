@@ -1,16 +1,19 @@
 import { Drawer } from "@/components/ui/Modal";
 import { FormDivider, GRID_2, InfoRow } from "@/components/ui/Section";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { SourceLabel } from "@/features/leads/lead-meta";
 import { goalLabel } from "@/features/lookups/fitness-goals";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { LEAD_NOTE_SEPARATOR, type Lead } from "@/types/lead";
 
 interface NoteEntry {
   date: string | null;
+  /** Account that recorded the entry (newer entries only). */
+  by: string | null;
   text: string;
 }
 
-/** Split the notes column into entries; follow-ups are stored as "YYYY-MM-DD: note". */
+/** Split the notes column into entries; follow-ups are stored as "YYYY-MM-DD [Who]: note" ("[Who]" optional). */
 function parseNotes(notes: string | null): NoteEntry[] {
   if (!notes) return [];
   return notes
@@ -18,8 +21,8 @@ function parseNotes(notes: string | null): NoteEntry[] {
     .map((raw) => raw.trim())
     .filter(Boolean)
     .map((raw) => {
-      const m = /^(\d{4}-\d{2}-\d{2}):\s*([\s\S]*)$/.exec(raw);
-      return m ? { date: m[1] ?? null, text: m[2] ?? "" } : { date: null, text: raw };
+      const m = /^(\d{4}-\d{2}-\d{2})(?: \[([^\]]+)\])?:\s*([\s\S]*)$/.exec(raw);
+      return m ? { date: m[1] ?? null, by: m[2] ?? null, text: m[3] ?? "" } : { date: null, by: null, text: raw };
     });
 }
 
@@ -39,6 +42,8 @@ export function LeadHistoryDrawer({ lead, onClose }: { lead: Lead | null; onClos
           <FormDivider>Details</FormDivider>
           <div className={GRID_2}>
             <InfoRow label="Status" value={<StatusBadge value={lead.status} />} />
+            <InfoRow label="Enquiry source" value={<SourceLabel source={lead.source} />} />
+            <InfoRow label="Attended by" value={lead.attended_by_name} />
             <InfoRow label="Goal" value={goalLabel(lead.goal)} />
             <InfoRow label="Location" value={lead.location} />
             <InfoRow label="Plan to join" value={lead.plan_to_join_date ? formatDate(lead.plan_to_join_date) : null} />
@@ -58,6 +63,7 @@ export function LeadHistoryDrawer({ lead, onClose }: { lead: Lead | null; onClos
                   <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-surface bg-accent ring-2 ring-accent/25" />
                   <div className="text-xs font-semibold text-muted">
                     {e.date ? formatDate(e.date) : "Initial note"}
+                    {e.by && <span className="font-medium"> · by {e.by}</span>}
                   </div>
                   <div className="mt-0.5 whitespace-pre-wrap text-sm font-medium text-ink">{e.text}</div>
                 </li>

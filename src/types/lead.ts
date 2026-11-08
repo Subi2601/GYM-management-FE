@@ -1,5 +1,5 @@
 import type { PageQuery } from "@/types/api";
-import type { FitnessGoal, LeadStatus } from "@/types/enums";
+import type { FitnessGoal, LeadSource, LeadStatus, PaymentMode } from "@/types/enums";
 
 /** GET /leads, /leads/{id} — see backend app/schemas/lead.py */
 export interface Lead {
@@ -9,28 +9,58 @@ export interface Lead {
   phone: string;
   location: string | null;
   goal: FitnessGoal | null;
+  /** null = not recorded (leads added before the source was captured). */
+  source: LeadSource | null;
   status: LeadStatus;
   plan_to_join_date: string | null;
   next_follow_up_date: string | null;
   last_follow_up_date: string | null;
-  /** History: entries joined by "\n---\n", follow-ups as "YYYY-MM-DD: note". */
+  /** History: entries joined by "\n---\n", follow-ups as "YYYY-MM-DD [Who]: note" ("[Who]" on newer entries). */
   notes: string | null;
   converted_member_id: string | null;
+  /** The account that took the enquiry (logged in when the lead was added). */
+  attended_by_id: string | null;
+  attended_by_name: string | null;
+  /** Source REFERRAL: the member who sent them (copied to the member on conversion). */
+  referred_by_id: string | null;
+  referred_by_name: string | null;
+  /** Trial class (null = none booked); dates from Configuration at booking. */
+  trial_start: string | null;
+  trial_end: string | null;
+  trial_state: TrialState | null;
+  /** 0 = free. */
+  trial_fee: number | null;
+  trial_paid_on: string | null;
+  trial_payment_mode: PaymentMode | null;
+  trial_visits: number;
+  trial_last_visit: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export const LEAD_FILTERS = ["all", "followup", "rejected"] as const;
+export type TrialState = "UPCOMING" | "ON" | "ENDED";
+
+/** GET /leads/attendants — "Attended by" filter options. */
+export interface LeadAttendant {
+  id: string;
+  name: string;
+}
+
+export const LEAD_FILTERS = ["all", "followup", "trial", "rejected"] as const;
 export type LeadFilter = (typeof LEAD_FILTERS)[number];
 
 /** Server sort keys of GET /leads (`sort_by`). */
-export type LeadSortKey = "name" | "status" | "plan_to_join_date" | "next_follow_up_date" | "created_at";
+export type LeadSortKey = "name" | "status" | "source" | "plan_to_join_date" | "next_follow_up_date" | "trial_start"
+  | "created_at";
 
 export interface LeadListQuery extends PageQuery {
   filter?: LeadFilter;
   sort_by?: string;
   sort_dir?: "asc" | "desc";
   status?: LeadStatus | "";
+  source?: LeadSource | "";
+  /** Account id (see LeadAttendant). */
+  attended_by?: string;
   /** YYYY-MM-DD range on next_follow_up_date. */
   follow_up_from?: string;
   follow_up_to?: string;
@@ -42,10 +72,12 @@ export interface LeadInput {
   phone: string;
   location: string;
   goal: FitnessGoal;
+  source: LeadSource;
   status: LeadStatus;
   plan_to_join_date: string;
   next_follow_up_date: string;
   notes?: string | null;
+  referred_by_id?: string | null;
 }
 
 /** POST /leads/{id}/follow-up */

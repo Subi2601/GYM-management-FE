@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 
 import type { SortDir } from "@/hooks/use-list-state";
-import { apiGet, apiPatch, apiPost, apiPut, cleanParams } from "@/lib/api-client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, cleanParams, forBranch } from "@/lib/api-client";
 import { useBranchStore } from "@/stores/branch-store";
 import type { PageQuery, Paginated, TabCounts } from "@/types/api";
 import type {
   Employee, EmployeeInput, EmployeeListFilter, EmployeePayrollInput, EmployeeProfile, EmployeeUpdate,
   FeedbackCreated, FeedbackInput,
-  PTAssignInput,
+  PTAssignInput, StaffLogin, StaffLoginInput,
 } from "@/types/employee";
 import type { EmployeeRole } from "@/types/enums";
 
@@ -27,7 +27,13 @@ export const staffApi = {
   /** Staff details page; `month` / `year` pick the attendance month (default: current). */
   profile: (id: string, month?: number, year?: number) =>
     apiGet<EmployeeProfile>(`/employees/${id}/profile`, cleanParams({ month, year })),
-  create: (body: EmployeeInput) => apiPost<Employee>("/employees", body),
+  /** `branchId` = add the employee to that branch instead of the selected one (owner picks it in the form). */
+  create: (body: EmployeeInput, branchId?: string) => apiPost<Employee>("/employees", body, undefined, forBranch(branchId)),
+  // App login (owner sets the password and shares it by hand).
+  login: (id: string) => apiGet<StaffLogin>(`/employees/${id}/login`),
+  saveLogin: (id: string, body: StaffLoginInput, branchId?: string) =>
+    apiPut<StaffLogin>(`/employees/${id}/login`, body, forBranch(branchId)),
+  disableLogin: (id: string) => apiDelete<StaffLogin>(`/employees/${id}/login`),
   update: (id: string, body: EmployeeUpdate) => apiPut<Employee>(`/employees/${id}`, body),
   payroll: (id: string, body: EmployeePayrollInput) => apiPut<Employee>(`/employees/${id}/payroll`, body),
   terminate: (id: string) => apiPatch<Employee>(`/employees/${id}/terminate`),
@@ -42,6 +48,7 @@ export const staffKeys = {
   detail: (branch: string | null | undefined, id: string) => ["employees", "detail", branch, id] as const,
   profile: (branch: string | null | undefined, id: string, month?: number, year?: number) =>
     ["employees", "profile", branch, id, month ?? null, year ?? null] as const,
+  login: (branch: string | null | undefined, id: string) => ["employees", "login", branch, id] as const,
 };
 
 /** Employee counts per status tab (Staff tabs, Payroll headcount tile). */

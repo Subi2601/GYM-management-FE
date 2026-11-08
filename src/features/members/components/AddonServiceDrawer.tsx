@@ -1,23 +1,24 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/Button";
-import { Field, Input, READONLY_INPUT, Select } from "@/components/ui/Field";
+import { Checkbox, Field, Input, READONLY_INPUT, Select } from "@/components/ui/Field";
 import { Drawer } from "@/components/ui/Modal";
 import { FormDivider, GRID_2 } from "@/components/ui/Section";
 import { usePlanLookup, useTrainerLookup } from "@/features/lookups/api";
 import { openInvoice, subscriptionApi, useInvalidateBilling } from "@/features/subscriptions/api";
-import { billingShape, netPayable, PAYMENT_MODE_LABEL, refineBilling, toEnrollPayment } from "@/features/subscriptions/lib/billing";
+import { OfferSelect } from "@/features/offers/components/OfferSelect";
+import { BILLING_DEFAULTS, billingShape, netPayable, PAYMENT_MODE_LABEL, refineBilling,
+  toEnrollPayment } from "@/features/subscriptions/lib/billing";
 import { formatINR } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { PAYMENT_MODES } from "@/types/enums";
 import type { Member } from "@/types/member";
 
-const DISCOUNT_REASONS = ["Referral Offer", "Existing Client Offer", "Festival Special", "Other"] as const;
 const FORM_ID = "addon-service-form";
 
 const schema = z.object({
@@ -40,13 +41,12 @@ type FormValues = z.infer<typeof schema>;
 export function AddonServiceDrawer({ member, onClose }: { member: Member; onClose: () => void }) {
   const navigate = useNavigate();
   const invalidateBilling = useInvalidateBilling();
-  const addons = usePlanLookup("ADD_ON");
+  const addons = usePlanLookup("ADD_ON", true, true);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      plan_id: "", trainer_id: "", needs_trainer: false, amount: 0, discount_amount: "", discount_reason: "",
-      paid_amount: "0", payment_mode: "CASH", balance_due_date: "",
+      ...BILLING_DEFAULTS, plan_id: "", trainer_id: "", needs_trainer: false,
     },
   });
 
@@ -55,6 +55,7 @@ export function AddonServiceDrawer({ member, onClose }: { member: Member; onClos
   const plan = (addons.data ?? []).find((p) => p.id === planId);
   const needsTrainer = plan?.service_type === "PERSONAL_TRAINING";
   const trainers = useTrainerLookup(needsTrainer);
+  const [idVerified, setIdVerified] = useState(false);
 
   useEffect(() => {
     setValue("amount", plan?.price ?? 0);
@@ -81,14 +82,17 @@ export function AddonServiceDrawer({ member, onClose }: { member: Member; onClos
     onError: notify.error,
   });
 
-  const onSubmit = (v: FormValues) =>
+  const onSubmit = (v: FormValues) => {
+    if (plan?.id_check && !idVerified) return notify.errorText(`Tick "${plan.id_check} verified" to continue.`);
     enroll.mutate({
       member_id: member.id,
       plan_ids: [v.plan_id],
       start_date: null,
       trainer_id: v.needs_trainer ? v.trainer_id : null,
+      id_verified: !!plan?.id_check && idVerified,
       payment: toEnrollPayment(v),
     });
+  };
 
   return (
     <Drawer
@@ -113,6 +117,9 @@ export function AddonServiceDrawer({ member, onClose }: { member: Member; onClos
               {(addons.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name} ({formatINR(p.price)})</option>)}
             </Select>
           </Field>
+          {plan?.id_check && (
+            <Checkbox checked={idVerified} onChange={setIdVerified} label={`${plan.id_check} verified`} />
+          )}
 
           {needsTrainer && (
             <Field label="Trainer" htmlFor="a-trainer" required error={errors.trainer_id?.message}>
@@ -126,16 +133,8 @@ export function AddonServiceDrawer({ member, onClose }: { member: Member; onClos
 
         <FormDivider>Payment</FormDivider>
         <div className={GRID_2}>
-          <Field label="Discount (₹)" htmlFor="a-discount" error={errors.discount_amount?.message}>
-            <Input id="a-discount" type="number" min={0} step="0.01" placeholder="e.g. 200" invalid={!!errors.discount_amount}
-              {...register("discount_amount")} />
-          </Field>
-          <Field label="Offer / reason" htmlFor="a-reason">
-            <Select id="a-reason" {...register("discount_reason")}>
-              <option value="">No discount</option>
-              {DISCOUNT_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
-            </Select>
-          </Field>
+          <OfferSelect id="a-offer" lines={plan ? [{ categoryId: plan.category_id, amount: plan.price }] : []} value={watch("offer_id")} setField={(n, val) => setValue(n, val)}
+            className="md:col-span-2" />
           <Field label="Final amount to pay (₹)" htmlFor="a-paid" error={errors.paid_amount?.message}>
             <Input id="a-paid" type="number" readOnly className={READONLY_INPUT} {...register("paid_amount")} />
           </Field>

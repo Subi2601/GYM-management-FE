@@ -23,12 +23,10 @@ export const memberProfileSchema = z.object({
   emergency_contact_name: z.string().trim().max(120),
   emergency_contact_phone: z.string().trim().refine((v) => v === "" || /^\d{10}$/.test(v), "Enter a valid 10-digit mobile number"),
   joining_date: z.string().min(1, "Joining date is required"),
-  id_proof_type: z.string().trim().max(40),
-  id_proof_number: z.string().trim().max(40),
+  /** "" = not referred. */
+  referred_by_id: z.string(),
 });
 export type MemberProfileValues = z.infer<typeof memberProfileSchema>;
-
-export const ID_PROOF_TYPES = ["Aadhaar", "PAN", "Driving License", "Voter ID", "Passport", "Other"] as const;
 
 export function toProfileValues(member: Member | null): MemberProfileValues {
   return {
@@ -44,19 +42,15 @@ export function toProfileValues(member: Member | null): MemberProfileValues {
     emergency_contact_name: member?.emergency_contact_name ?? "",
     emergency_contact_phone: member?.emergency_contact_phone ?? "",
     joining_date: member?.joining_date ?? todayISO(),
-    id_proof_type: member?.id_proof_type ?? "",
-    id_proof_number: member?.id_proof_number ?? "",
+    referred_by_id: member?.referred_by_id ?? "",
   };
 }
 
 const textOrNull = (v: string) => (v.trim() === "" ? null : v.trim());
 const numberOrNull = (v: string) => (v.trim() === "" ? null : Number(v));
 
-/**
- * Request body for POST / PUT /members. `includeIdProofNumber` is false on edit when the number was not
- * touched — it may arrive masked (XXXX-XXXX-1234) and must not be written back.
- */
-export function toMemberBody(v: MemberProfileValues, includeIdProofNumber: boolean): MemberInput {
+/** Request body for POST / PUT /members. ID proof is no longer captured; stored values are left untouched. */
+export function toMemberBody(v: MemberProfileValues): MemberInput {
   const body: MemberInput = {
     name: v.name.trim(),
     phone: v.phone.trim(),
@@ -70,8 +64,7 @@ export function toMemberBody(v: MemberProfileValues, includeIdProofNumber: boole
     emergency_contact_name: textOrNull(v.emergency_contact_name),
     emergency_contact_phone: textOrNull(v.emergency_contact_phone),
     joining_date: v.joining_date,
-    id_proof_type: textOrNull(v.id_proof_type),
+    referred_by_id: v.referred_by_id || null,
   };
-  if (includeIdProofNumber) body.id_proof_number = textOrNull(v.id_proof_number);
   return body;
 }

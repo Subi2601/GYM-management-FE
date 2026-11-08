@@ -15,6 +15,7 @@ import { AssignPTModal } from "@/features/staff/components/AssignPTModal";
 import { AttendanceMonthCard } from "@/features/staff/components/AttendanceMonthCard";
 import { PayrollDrawer } from "@/features/staff/components/PayrollDrawer";
 import { FeedbackCard, PTClientCard } from "@/features/staff/components/ProfileCards";
+import { StaffLoginCard } from "@/features/staff/components/StaffLoginCard";
 import { AverageRating } from "@/features/staff/components/StarRating";
 import { shiftRanges } from "@/features/staff/lib/shifts";
 import { formatDate, formatINR, MONTHS } from "@/lib/format";
@@ -97,6 +98,7 @@ function EmployeeDetails({ profile, loadingMonth, onPrevMonth, onNextMonth, canN
   const canTerminate = useCan("employee:terminate");
   const canAssignPT = useCan("pt:create");
   const canFeedback = useCan("feedback:create");
+  const canLogin = useCan("employee:login");
   const active = emp.status !== "TERMINATED";
   const writable = branch !== null && active;
   const [payrollOpen, setPayrollOpen] = useState(false);
@@ -242,6 +244,8 @@ function EmployeeDetails({ profile, loadingMonth, onPrevMonth, onNextMonth, canN
         </div>
 
         <div className="flex flex-col gap-5">
+          {canLogin && <StaffLoginCard employee={emp} writable={writable} />}
+
           <Section title="Payroll & bank"
             aside={canUpdate && writable && <LinkButton onClick={() => setPayrollOpen(true)}>Edit</LinkButton>}>
             <Rows rows={[

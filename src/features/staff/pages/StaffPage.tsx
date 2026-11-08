@@ -17,6 +17,7 @@ import { paginationProps, useAddAction, useListState, useUrlEnum } from "@/hooks
 import { formatDate, formatINR } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { cn, humanize } from "@/lib/utils";
+import { ALL_BRANCHES_REASON, useWriteAccess } from "@/hooks/use-write-access";
 import { useCan } from "@/stores/auth-store";
 import { useBranchStore } from "@/stores/branch-store";
 import { EMPLOYEE_LIST_FILTERS, type Employee, type EmployeeListFilter, type EmployeeSortKey } from "@/types/employee";
@@ -35,10 +36,13 @@ export function StaffPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const branch = useBranchStore((s) => s.selectedBranchId);
-  const canCreate = useCan("employee:create");
+  const create = useWriteAccess("employee:create");
   const canUpdate = useCan("employee:update");
   const canTerminate = useCan("employee:terminate");
+  const canCreate = create.show;
   const writable = branch !== null;
+  // "All Branches" keeps the write controls visible but greyed out.
+  const lockedReason = writable ? undefined : ALL_BRANCHES_REASON;
 
   const [tab, setTab] = useUrlEnum("tab", EMPLOYEE_LIST_FILTERS, "active");
   const list = useListState();
@@ -51,7 +55,7 @@ export function StaffPage() {
   useEffect(() => setPage(1), [tab, role, branch, setPage]);
 
   // Dashboard quick link /staff?action=add opens the registration page.
-  useAddAction(useCallback(() => navigate("/staff/new"), [navigate]), canCreate && writable);
+  useAddAction(useCallback(() => navigate("/staff/new"), [navigate]), canCreate);
 
   const query: EmployeeListQuery = { ...list.query, status: tab, role };
   const employees = useQuery({
@@ -133,26 +137,33 @@ export function StaffPage() {
         const payrollSet = e.base_salary > 0;
         return (
           <ActionGroup>
-            {canUpdate && writable && active && (
-              <button type="button" className={cn("btn-status-action", payrollSet ? "btn-grey" : "btn-yellow")}
-                title="Base salary and bank details" onClick={() => setPayrollFor(e)}>
-                {payrollSet ? "Payroll" : "Set payroll"}
-              </button>
+            {canUpdate && active && (
+              <span title={lockedReason ?? "Base salary and bank details"} className="inline-flex">
+                <button type="button" disabled={!writable}
+                  className={cn("btn-status-action disabled:pointer-events-none disabled:opacity-40", payrollSet ? "btn-grey" : "btn-yellow")}
+                  onClick={() => setPayrollFor(e)}>
+                  {payrollSet ? "Payroll" : "Set payroll"}
+                </button>
+              </span>
             )}
-            {canTerminate && writable && active && (
-              <button type="button" className="btn-status-action btn-red" onClick={() => void onTerminate(e)}>
-                Terminate
-              </button>
+            {canTerminate && active && (
+              <span title={lockedReason} className="inline-flex">
+                <button type="button" disabled={!writable}
+                  className="btn-status-action btn-red disabled:pointer-events-none disabled:opacity-40" onClick={() => void onTerminate(e)}>
+                  Terminate
+                </button>
+              </span>
             )}
             <ActionIcon kind="view" title="View details" onClick={() => openDetails(e)} />
-            {canUpdate && writable && active && (
-              <ActionIcon kind="edit" onClick={() => navigate(`/staff/${e.id}/edit`)} />
+            {canUpdate && active && (
+              <ActionIcon kind="edit" disabled={!writable} disabledReason={lockedReason}
+                onClick={() => navigate(`/staff/${e.id}/edit`)} />
             )}
           </ActionGroup>
         );
       },
     },
-  ], [canTerminate, canUpdate, writable, onTerminate, navigate, openDetails]);
+  ], [canTerminate, canUpdate, writable, lockedReason, onTerminate, navigate, openDetails]);
 
   const active: ActiveFilter[] = [];
   if (role) active.push({ label: `Role: ${humanize(role)}`, onRemove: () => setRole("") });
@@ -165,7 +176,8 @@ export function StaffPage() {
       <PageHeader
         title="Staff"
         subtitle="Employees, their profiles, personal training clients and feedback"
-        actions={canCreate && writable && (
+        actions={create.show && (
+          // Works from "All Branches" too — the form then asks which branch.
           <Button icon={<Icon name="plus" className="h-4 w-4" />} onClick={() => navigate("/staff/new")}>
             Add staff
           </Button>
@@ -186,7 +198,7 @@ export function StaffPage() {
         emptyIcon="users"
         emptyMessage={filtered ? "No staff match these filters" : tab === "archive" ? "No terminated staff" : "No staff yet"}
         emptyHint={filtered ? "Try a different search or clear the filters."
-          : canCreate && writable && tab !== "archive" ? "Add your first employee to get started." : undefined}
+          : canCreate && tab !== "archive" ? "Add your first employee to get started." : undefined}
         sorting={list.sorting}
         pagination={paginationProps(list, data?.total)}
         toolbar={

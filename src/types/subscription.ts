@@ -26,6 +26,22 @@ export interface SubscriptionRow {
   renewal_state: RenewalState;
   /** Negative = days since expiry. */
   days_left: number;
+  /** This plan was upgraded to that subscription. */
+  upgraded_to_id: string | null;
+  /** This plan is an upgrade of that subscription. */
+  upgraded_from_id: string | null;
+  /** Credit taken off this plan's bill for the old plan. */
+  upgrade_credit: number | null;
+  /** Freeze days already added to end_date. */
+  frozen_days: number;
+  /** Ended early. */
+  closed_reason: "CANCELLED" | "TRANSFERRED" | null;
+  closed_on: string | null;
+  /** Who it went to / the refund, and why. */
+  close_note: string | null;
+  transferred_to_id: string | null;
+  /** Received from another member (paid by them). */
+  transferred_from_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -82,4 +98,44 @@ export interface SubscriptionListQuery {
   plan_id?: string;
   sort_by?: string;
   sort_dir?: SortDir;
+}
+
+/** GET /subscriptions/member/{id}/upgrade — one membership plan in the upgrade list. */
+export interface UpgradeOption {
+  plan_id: string;
+  name: string;
+  category_id: string;
+  category_name: string;
+  duration_months: number | null;
+  duration_days: number;
+  price: number;
+  id_check: string | null;
+  /** Bigger plan that can be picked; the rest are shown greyed with `reason`. */
+  eligible: boolean;
+  reason: string | null;
+  /** price − credit: what the member pays before any offer. */
+  balance: number;
+}
+
+export interface UpgradeCurrent {
+  subscription_id: string;
+  plan_id: string;
+  plan_name: string;
+  category_name: string;
+  start_date: string;
+  end_date: string;
+  /** What the current plan cost (after its discount) — taken off the new plan. */
+  credit: number;
+  receipt_no: string | null;
+  window_days: number;
+  /** Last day to upgrade; null = upgrades off for this plan. */
+  window_ends: string | null;
+}
+
+export interface UpgradeInfo {
+  current: UpgradeCurrent | null;
+  can_upgrade: boolean;
+  /** Why not: window closed, balance pending, no plan … */
+  reason: string | null;
+  options: UpgradeOption[];
 }

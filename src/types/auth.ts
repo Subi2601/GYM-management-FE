@@ -17,9 +17,16 @@ export interface MeUser {
   name: string;
   email: string;
   role: AccountRole;
+  /** The gym role: Owner, Sub-admin, Manager, Staff or the gym's own. */
+  role_name: string | null;
+  role_level: number | null;
   is_superadmin: boolean;
   organization_id: string | null;
   organization_name: string | null;
+  /** Gym ID */
+  organization_code?: string | null;
+  /** Public logo link (Gym Settings). */
+  organization_logo_url?: string | null;
   branch_id: string | null;
 }
 

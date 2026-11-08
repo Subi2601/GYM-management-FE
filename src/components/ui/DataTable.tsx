@@ -252,20 +252,28 @@ function PaginationBar({ page, pageSize, total, onPageChange, onPageSizeChange }
 }
 
 interface ActionButtonProps {
-  kind: "view" | "edit" | "delete" | "print";
+  kind: "view" | "edit" | "delete" | "print" | "renew" | "trial" | "tree";
   title?: string;
   onClick: () => void;
+  /** Greyed out, not clickable; `disabledReason` becomes the tooltip (e.g. "All Branches" is selected). */
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
-const ACTION_ICON = { view: "eye", edit: "edit", delete: "trash", print: "print" } as const;
+const ACTION_ICON = { view: "eye", edit: "edit", delete: "trash", print: "print", renew: "trending",
+  trial: "dumbbell", tree: "tree" } as const;
 
 /** Square icon buttons used in the Actions column. */
-export function ActionIcon({ kind, title, onClick }: ActionButtonProps) {
+export function ActionIcon({ kind, title, onClick, disabled = false, disabledReason }: ActionButtonProps) {
   const label = title ?? kind[0]!.toUpperCase() + kind.slice(1);
+  // A disabled <button> shows no tooltip, so the reason sits on a wrapper.
   return (
-    <button type="button" className={cn("action-icon", kind)} title={label} aria-label={label} onClick={onClick}>
-      <Icon name={ACTION_ICON[kind]} className="h-4 w-4" />
-    </button>
+    <span title={disabled ? disabledReason ?? label : undefined} className="inline-flex">
+      <button type="button" className={cn("action-icon", kind, disabled && "pointer-events-none opacity-40")}
+        title={disabled ? undefined : label} aria-label={label} disabled={disabled} onClick={onClick}>
+        <Icon name={ACTION_ICON[kind]} className="h-4 w-4" />
+      </button>
+    </span>
   );
 }
 

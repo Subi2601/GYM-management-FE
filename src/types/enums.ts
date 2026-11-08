@@ -10,6 +10,10 @@ export type MembershipState = "ACTIVE" | "EXPIRING" | "EXPIRED" | "NO_PLAN";
 export const LEAD_STATUSES = ["NEW", "FOLLOW_UP", "JOINED", "NOT_INTERESTED", "JOINED_ELSEWHERE"] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
+/** How the enquiry reached the gym. */
+export const LEAD_SOURCES = ["WALK_IN", "PHONE_CALL", "ENQUIRY_FORM", "REFERRAL", "SOCIAL_MEDIA", "OTHER"] as const;
+export type LeadSource = (typeof LEAD_SOURCES)[number];
+
 export const FITNESS_GOALS = [
   "WEIGHT_LOSS", "MUSCLE_GAIN", "BODY_TONING", "WEIGHT_GAIN",
   "STRENGTH", "ENDURANCE", "SPORTS_PERFORMANCE", "COMPETITION_PREP",

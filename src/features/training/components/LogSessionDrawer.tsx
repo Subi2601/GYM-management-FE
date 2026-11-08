@@ -12,6 +12,8 @@ import { useTrainerLookup } from "@/features/lookups/api";
 import { trainingApi, trainingKeys } from "@/features/training/api";
 import { formatDate, todayISO } from "@/lib/format";
 import { notify } from "@/lib/notify";
+import { openWhatsApp } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth-store";
 import { useBranchStore } from "@/stores/branch-store";
 import type { PTSubscription } from "@/types/training";
 
@@ -23,6 +25,7 @@ const schema = z.object({
   trainer_verified: z.boolean(),
   client_verified: z.boolean(),
   notes: z.string().trim().max(1000, "Max 1000 characters"),
+  notify_client: z.boolean(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -46,8 +49,9 @@ export function LogSessionDrawer({ pt, onClose }: { pt: PTSubscription; onClose:
   const { register, control, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(refined),
     defaultValues: { trainer_id: pt.trainer_id ?? "", session_date: today, trainer_verified: true,
-      client_verified: false, notes: "" },
+      client_verified: false, notes: "", notify_client: true },
   });
+  const gymName = useAuthStore((s) => s.me?.user.organization_name) ?? "the gym";
 
   const log = useMutation({
     mutationFn: (v: FormValues) => trainingApi.logSession(pt.id, {
@@ -57,8 +61,26 @@ export function LogSessionDrawer({ pt, onClose }: { pt: PTSubscription; onClose:
       client_verified: v.client_verified,
       notes: v.notes || null,
     }),
-    onSuccess: async (res) => {
+    onSuccess: async (res, v) => {
       notify.success(res.message);
+      if (v.notify_client) {
+        // Click-to-chat (no WhatsApp API): the desk taps Send; the client gets a record of every session.
+        const trainer = trainers.data?.find((t) => t.id === v.trainer_id)?.name;
+        const left = Math.max(0, pt.sessions_remaining - 1);
+        openWhatsApp(pt.member_phone, [
+          `Dear ${pt.member_name} 👋`,
+          "",
+          `✅ Your personal training session on *${formatDate(v.session_date)}* has been completed`
+            + `${trainer ? ` with your trainer *${trainer}*` : ""}.`,
+          "",
+          `💪 Sessions remaining: *${left} of ${pt.total_sessions}*`,
+          `📅 Valid till: *${formatDate(pt.expiry_date)}*`,
+          "",
+          "📞 If you have any queries, please let us know.",
+          "",
+          `Regards,\n*${gymName}* 🏋️`,
+        ].join("\n"));
+      }
       onClose();
       await qc.invalidateQueries({ queryKey: trainingKeys.all(branch) });
     },
@@ -110,6 +132,10 @@ export function LogSessionDrawer({ pt, onClose }: { pt: PTSubscription; onClose:
           )} />
           <Controller control={control} name="client_verified" render={({ field }) => (
             <Checkbox checked={field.value} onChange={field.onChange} label="Client verified (OTP / signature)" />
+          )} />
+          <Controller control={control} name="notify_client" render={({ field }) => (
+            <Checkbox checked={field.value} onChange={field.onChange}
+              label={`Send the session summary to ${pt.member_name} on WhatsApp`} />
           )} />
         </div>
       </form>

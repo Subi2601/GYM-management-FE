@@ -92,6 +92,8 @@ export interface CheckResult {
   name: string;
   time: string;
   late: boolean;
+  /** Came so late the day is a half day (Configuration). */
+  half_day?: boolean;
   duration_minutes: number | null;
 }
 
@@ -129,4 +131,13 @@ export interface CheckinInfo {
   organization_name: string;
   location_required: boolean;
   person: { name: string; person_type: AttendancePersonType } | null;
+}
+
+/** Another branch's member whose plan is valid at all branches (GET /attendance/members/visitors). */
+export interface VisitingMember {
+  id: string;
+  name: string;
+  registration_id: string;
+  phone: string;
+  home_branch: string;
 }

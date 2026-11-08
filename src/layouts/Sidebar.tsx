@@ -9,11 +9,10 @@ import { useBranchStore } from "@/stores/branch-store";
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
-  onManageBranches: () => void;
 }
 
 /** Fixed sidebar: logo, branch switcher, one link per screen in labelled groups. Profile + sign out live in the header. */
-export function Sidebar({ open, onClose, onManageBranches }: SidebarProps) {
+export function Sidebar({ open, onClose }: SidebarProps) {
   const can = useAuthStore((s) => s.can);
   const me = useAuthStore((s) => s.me);
   useAuthStore((s) => s.permissions); // re-render when permissions change
@@ -27,14 +26,6 @@ export function Sidebar({ open, onClose, onManageBranches }: SidebarProps) {
         <span className="truncate">{item.label}</span>
       </>
     );
-    if (item.action === "manage-branches") {
-      return (
-        <button key={item.key} type="button" className="nav-item w-full"
-          onClick={() => { onManageBranches(); onClose(); }}>
-          {content}
-        </button>
-      );
-    }
     return (
       <NavLink key={item.key} to={item.to!} onClick={onClose}
         className={({ isActive }) => cn("nav-item", isActive && "active")}>
@@ -71,9 +62,13 @@ export function Sidebar({ open, onClose, onManageBranches }: SidebarProps) {
     >
       {/* Logo — same height as the header so the two bars line up */}
       <div className="side-divider flex h-header shrink-0 items-center gap-3 px-5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-grad font-display text-xl font-bold text-white shadow-glow">
-          S
-        </div>
+        {me?.user.organization_logo_url ? (
+          <img src={me.user.organization_logo_url} alt="" className="h-9 w-9 shrink-0 rounded-[10px] bg-white object-contain p-0.5" />
+        ) : (
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-grad font-display text-xl font-bold text-white shadow-glow">
+            S
+          </div>
+        )}
         <div className="min-w-0">
           <div className="side-strong font-display text-[20px] font-bold uppercase leading-none tracking-[0.4px]">
             Stag <span className="text-gradient">Fitness</span>

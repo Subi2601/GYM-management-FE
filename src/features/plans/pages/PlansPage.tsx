@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
 import { confirm } from "@/components/ui/ConfirmDialog";
@@ -9,68 +10,76 @@ import { Icon } from "@/components/ui/Icon";
 import { FilterSelect, FilterTabs, ListToolbar, type ActiveFilter } from "@/components/ui/ListToolbar";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { planApi, planKeys, useInvalidatePlans, type PlanListQuery, type PlanSortKey,
-  type PlanTab } from "@/features/plans/api";
+import { PLAN_STATUS_TABS, planApi, planKeys, useInvalidatePlans, usePlanCategories, type PlanCountsQuery,
+  type PlanListQuery, type PlanSortKey } from "@/features/plans/api";
+import { ManageCategoriesModal } from "@/features/plans/components/ManageCategoriesModal";
+import { PlanBadges } from "@/features/plans/components/PlanBadges";
 import { PlanFormDrawer } from "@/features/plans/components/PlanFormDrawer";
-import { dayRate, SERVICE_LABEL, TYPE_LABEL } from "@/features/plans/labels";
+import { planDuration, planUnitPrice } from "@/features/plans/labels";
 import { paginationProps, useAddAction, useListState, useUrlEnum } from "@/hooks/use-list-state";
+import { useWriteAccess } from "@/hooks/use-write-access";
 import { formatINR } from "@/lib/format";
 import { notify } from "@/lib/notify";
-import { useCan } from "@/stores/auth-store";
+import { cn } from "@/lib/utils";
 import { useBranchStore } from "@/stores/branch-store";
-import { PLAN_SERVICE_TYPES, type PlanServiceType, type PlanType } from "@/types/enums";
 import type { Plan } from "@/types/plan";
 
-const PLAN_TABS = ["all", "membership", "addon", "custom"] as const satisfies readonly PlanTab[];
-
-const TAB_LABEL: Record<PlanTab, string> = {
-  all: "All plans", membership: "Membership", addon: "Add-ons", custom: "Customization",
-};
-const EMPTY_MESSAGE: Record<PlanTab, string> = {
-  all: "No plans yet", membership: "No membership plans yet", addon: "No add-on services yet",
-  custom: "No customized plans yet",
-};
-const TAB_TYPE: Record<PlanTab, PlanType | undefined> = {
-  all: undefined, membership: "MEMBERSHIP", addon: "ADD_ON", custom: "CUSTOM",
-};
-
-const SERVICE_TONE = { GENERAL: "grey", PERSONAL_TRAINING: "purple", DIET: "green" } as const;
-
 const sortKey = (key: PlanSortKey) => key;
+const TAB_LABEL = { active: "Active", inactive: "Inactive", all: "All plans" } as const;
 
-/** Plans — type tabs with counts, search + service filter, sortable list, add / edit drawer, delete (backend refuses plans in use). */
+/**
+ * Plans & Pricing — Active / Inactive tabs (`?tab=`), category filter (`?cat=`) + search, add / edit drawer,
+ * activate / deactivate (plans with members are deactivated, not deleted), category manager.
+ */
 export function PlansPage() {
   const branch = useBranchStore((s) => s.selectedBranchId);
-  const [tab, setTab] = useUrlEnum("tab", PLAN_TABS, "all");
-  const list = useListState();
-  const [serviceType, setServiceType] = useState<PlanServiceType | "">("");
-  const canCreate = useCan("plan:create");
-  const canUpdate = useCan("plan:update");
-  const canDelete = useCan("plan:delete");
+  const [params, setParams] = useSearchParams();
+  const list = useListState({ pageSize: 50 });
+  const [tab, setTab] = useUrlEnum("tab", PLAN_STATUS_TABS, "active");
+  const create = useWriteAccess("plan:create");
+  const update = useWriteAccess("plan:update");
+  const del = useWriteAccess("plan:delete");
   const invalidate = useInvalidatePlans();
   /** undefined = closed, null = add, Plan = edit. */
   const [editing, setEditing] = useState<Plan | null | undefined>(undefined);
+  const [managing, setManaging] = useState(false);
+
+  const categories = usePlanCategories();
+  const cats = useMemo(() => categories.data ?? [], [categories.data]);
+  const rawCat = params.get("cat");
+  const cat = cats.some((c) => c.id === rawCat) ? rawCat! : "";
+  const setCat = (next: string) => setParams((prev) => {
+    const p = new URLSearchParams(prev);
+    if (!next) p.delete("cat");
+    else p.set("cat", next);
+    return p;
+  }, { replace: true });
 
   const { setPage } = list;
-  // Tab / filter changes restart from page 1.
-  useEffect(() => setPage(1), [tab, serviceType, setPage]);
-  // Membership and custom plans are always General, so the service filter doesn't apply there.
-  const serviceFilterApplies = tab === "all" || tab === "addon";
-  useEffect(() => {
-    if (!serviceFilterApplies) setServiceType("");
-  }, [serviceFilterApplies]);
+  useEffect(() => setPage(1), [cat, tab, setPage]);
+  useAddAction(useCallback(() => setEditing(null), []), create.allowed);
 
-  useAddAction(useCallback(() => setEditing(null), []), canCreate);
-
-  const query: PlanListQuery = { ...list.query, type: TAB_TYPE[tab], service_type: serviceType };
+  const query: PlanListQuery = { ...list.query, category_id: cat || undefined, status: tab === "all" ? undefined : tab };
   const plans = useQuery({
     queryKey: planKeys.list(branch, query),
     queryFn: () => planApi.list(query),
     placeholderData: keepPreviousData,
   });
+  const countsQuery: PlanCountsQuery = { search: list.debouncedSearch || undefined, category_id: cat || undefined };
+  const counts = useQuery({
+    queryKey: planKeys.counts(branch, countsQuery),
+    queryFn: async () => (await planApi.counts(countsQuery)).data,
+    placeholderData: keepPreviousData,
+  });
 
-  const counts = useQuery({ queryKey: planKeys.counts(branch), queryFn: async () => (await planApi.counts()).data });
-
+  const toggle = useMutation({
+    mutationFn: (p: Plan) => planApi.update(p.id, { is_active: !p.is_active }),
+    onSuccess: async (res) => {
+      notify.success(res.data.is_active ? `${res.data.name} is active again` : `${res.data.name} is inactive: not shown in billing`);
+      await invalidate();
+    },
+    onError: notify.error,
+  });
   const remove = useMutation({
     mutationFn: planApi.remove,
     onSuccess: async (res) => {
@@ -80,98 +89,120 @@ export function PlansPage() {
     onError: notify.error,
   });
 
-  const columns = useMemo<ColumnDef<Plan, unknown>[]>(() => {
-    const cols: ColumnDef<Plan, unknown>[] = [
-      { accessorKey: "name", header: "Plan", meta: { sortKey: sortKey("name") },
-        cell: ({ row }) => (
-          <div className="min-w-0 max-w-[360px]">
-            <div className="truncate font-semibold text-ink">{row.original.name}</div>
-            {row.original.description && <div className="truncate text-xs text-muted">{row.original.description}</div>}
+  const columns = useMemo<ColumnDef<Plan, unknown>[]>(() => [
+    { accessorKey: "name", header: "Plan", meta: { sortKey: sortKey("name") },
+      cell: ({ row }) => (
+        <div className={cn("min-w-0 max-w-[280px]", !row.original.is_active && "opacity-60")}>
+          <div className="truncate font-semibold text-ink">{row.original.name}</div>
+          <div className="truncate text-xs text-muted">
+            {cat ? row.original.description ?? "" : row.original.category_name}
           </div>
-        ) },
-      { accessorKey: "type", header: "Type", meta: { width: "120px", sortKey: sortKey("type") },
-        cell: ({ row }) => TYPE_LABEL[row.original.type] },
-      { accessorKey: "service_type", header: "Service", meta: { width: "170px", sortKey: sortKey("service_type") },
-        cell: ({ row }) => <StatusBadge value={row.original.service_type} tone={SERVICE_TONE[row.original.service_type]} /> },
-      { accessorKey: "duration_days", header: "Duration", meta: { width: "120px", sortKey: sortKey("duration_days") },
-        cell: ({ row }) => <span className="whitespace-nowrap">{row.original.duration_days} days</span> },
-      { accessorKey: "total_sessions", header: "Sessions", meta: { width: "100px" },
-        cell: ({ row }) => row.original.total_sessions || <span className="text-muted">—</span> },
-      { accessorKey: "price", header: "Price", meta: { width: "130px", align: "right", sortKey: sortKey("price") },
-        cell: ({ row }) => {
-          const perDay = dayRate(row.original);
-          return (
-            <div>
-              <div className="font-semibold">{formatINR(row.original.price)}</div>
-              {perDay !== null && <div className="text-xs text-muted">{formatINR(perDay)} per day</div>}
-            </div>
-          );
-        } },
-    ];
-    if (canUpdate || canDelete) {
-      cols.push({
-        id: "actions", header: "Actions", meta: { width: "110px" },
-        cell: ({ row }) => (
+        </div>
+      ) },
+    { accessorKey: "duration_days", header: "Duration", meta: { width: "120px", sortKey: sortKey("duration_days") },
+      cell: ({ row }) => <span className="whitespace-nowrap">{planDuration(row.original)}</span> },
+    { id: "package", header: "Package", meta: { width: "150px" },
+      cell: ({ row }) => <PlanBadges plan={row.original} empty={<span className="text-muted">Single</span>} /> },
+    { accessorKey: "price", header: "Price", meta: { width: "140px", align: "right", sortKey: sortKey("price") },
+      cell: ({ row }) => (
+        <div>
+          <div className="font-semibold">{formatINR(row.original.price, true)}</div>
+          <div className="text-xs text-muted">{planUnitPrice(row.original)}</div>
+        </div>
+      ) },
+    // Status only on "All plans"; the Active / Inactive tabs already say it.
+    ...(tab === "all" ? [{ id: "status", header: "Status", meta: { width: "110px" },
+      cell: ({ row }) => <StatusBadge value={row.original.is_active ? "ACTIVE" : "INACTIVE"} /> } satisfies ColumnDef<Plan, unknown>] : []),
+    {
+      id: "actions", header: "Actions", meta: { width: "200px" },
+      cell: ({ row }) => {
+        const p = row.original;
+        return (
           <ActionGroup>
-            {canUpdate && <ActionIcon kind="edit" onClick={() => setEditing(row.original)} />}
-            {canDelete && (
-              <ActionIcon kind="delete" onClick={async () => {
-                if (await confirm(`Are you sure you want to delete plan: ${row.original.name}?`)) remove.mutate(row.original.id);
+            {update.show && (
+              <span title={update.reason} className="inline-flex">
+                <button type="button" className="btn-status-action btn-grey disabled:pointer-events-none disabled:opacity-40"
+                  disabled={update.disabled || toggle.isPending} onClick={() => toggle.mutate(p)}>
+                  {p.is_active ? "Deactivate" : "Activate"}
+                </button>
+              </span>
+            )}
+            {update.show && (
+              <ActionIcon kind="edit" disabled={update.disabled} disabledReason={update.reason} onClick={() => setEditing(p)} />
+            )}
+            {del.show && (
+              <ActionIcon kind="delete" disabled={del.disabled} disabledReason={del.reason} onClick={async () => {
+                if (await confirm(`Delete plan ${p.name}? Plans members are on can only be deactivated.`)) remove.mutate(p.id);
               }} />
             )}
           </ActionGroup>
-        ),
-      });
-    }
-    return cols;
-  }, [canUpdate, canDelete, remove]);
+        );
+      },
+    },
+  ], [cat, tab, update, del, toggle, remove]);
 
   const active: ActiveFilter[] = [];
-  if (serviceType) active.push({ label: `Service: ${SERVICE_LABEL[serviceType]}`, onRemove: () => setServiceType("") });
-
-  const data = plans.data?.data;
+  const catName = cats.find((c) => c.id === cat)?.name;
+  if (catName) active.push({ label: `Category: ${catName}`, onRemove: () => setCat("") });
   const filtered = !!list.debouncedSearch || active.length > 0;
 
   return (
     <div>
       <PageHeader
-        title="Plans"
-        subtitle="Membership plans, add-on services and customized plans"
-        actions={canCreate && (
-          <Button icon={<Icon name="plus" className="h-4 w-4" />} onClick={() => setEditing(null)}>Add plan</Button>
-        )}
+        title="Plans & Pricing"
+        subtitle="Your packages and prices. Make a plan inactive to stop selling it; members on it keep it"
+        actions={
+          <>
+            {update.show && (
+              <Button variant="secondary" icon={<Icon name="tag" className="h-4 w-4" />} onClick={() => setManaging(true)}>
+                Categories
+              </Button>
+            )}
+            {create.show && (
+              <span title={create.reason}>
+                <Button icon={<Icon name="plus" className="h-4 w-4" />} disabled={create.disabled} onClick={() => setEditing(null)}>
+                  Add plan
+                </Button>
+              </span>
+            )}
+          </>
+        }
       />
 
       <DataTable
         columns={columns}
-        data={data?.items ?? []}
+        data={plans.data?.data.items ?? []}
         loading={plans.isLoading}
         fetching={plans.isFetching}
         getRowId={(p) => p.id}
-        onRowClick={canUpdate ? (p) => setEditing(p) : undefined}
+        onRowClick={update.allowed ? (p) => setEditing(p) : undefined}
         emptyIcon="tag"
-        emptyMessage={filtered ? "No plans match these filters" : EMPTY_MESSAGE[tab]}
-        emptyHint={filtered ? "Try a different search or clear the filters." : canCreate ? "Add a plan so members can be enrolled." : undefined}
+        emptyMessage={filtered ? "No plans match these filters" : tab === "inactive" ? "No inactive plans" : "No plans yet"}
+        emptyHint={filtered ? "Try a different search or clear the filters."
+          : create.allowed ? "Add a plan so the desk can sell it." : undefined}
         sorting={list.sorting}
-        pagination={paginationProps(list, data?.total)}
+        pagination={paginationProps(list, plans.data?.data.total)}
         toolbar={
           <>
             <FilterTabs value={tab} onChange={setTab}
-              tabs={PLAN_TABS.map((t) => ({ value: t, label: TAB_LABEL[t], count: counts.data?.[t] }))} />
+              tabs={PLAN_STATUS_TABS.map((t) => ({ value: t, label: TAB_LABEL[t], count: counts.data?.[t] }))} />
             <ListToolbar
               search={{ value: list.search, onChange: list.setSearch, placeholder: "Search plans" }}
-              filters={serviceFilterApplies && (
-                <FilterSelect placeholder="Any service" ariaLabel="Service type" value={serviceType}
-                  onChange={(v) => setServiceType(v as PlanServiceType | "")}
-                  options={PLAN_SERVICE_TYPES.map((s) => ({ value: s, label: SERVICE_LABEL[s] }))} />
-              )}
+              filters={
+                <FilterSelect placeholder="All categories" ariaLabel="Category" value={cat} onChange={setCat}
+                  options={cats.map((c) => ({ value: c.id, label: c.is_active ? c.name : `${c.name} (inactive)` }))} />
+              }
               active={active}
             />
           </>
         }
       />
 
-      {editing !== undefined && <PlanFormDrawer plan={editing} onClose={() => setEditing(undefined)} />}
+      {editing !== undefined && (
+        <PlanFormDrawer plan={editing} defaultCategoryId={cat || cats[0]?.id}
+          onClose={() => setEditing(undefined)} />
+      )}
+      {managing && <ManageCategoriesModal onClose={() => setManaging(false)} />}
     </div>
   );
 }

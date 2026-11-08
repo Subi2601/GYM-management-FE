@@ -56,6 +56,10 @@ src/
   Mount drawers/modals only while open (or reset on success and on close).
 - **Permissions**: `useCan("resource:action")`. Hide (don't disable) what the user can't do. Never branch on
   role names.
+- **Roles & Access** (`/roles`, `features/roles`): the gym's role ladder + access ticks per module → screen; owner-only
+  ticks locked, "Switch branches" only for all-branch roles. Staff logins pick a role with `<RoleSelect>`
+  (`/roles/assignable` = roles below the user's level); show the role with `role_name`, never the old Admin / Trainer
+  enum.
 - **List screens** (Members is the reference): `<PageHeader title subtitle actions>` (primary "Add …" button) →
   `<DataTable toolbar={<><FilterTabs/><ListToolbar/></>}>`. Status filters are tabs kept in `?tab=` (`useUrlEnum`)
   with counts from the list's `GET /<list>/counts` (one call, typed `TabCounts<Tab>`; never one request per tab); search + `FilterSelect`/`DateRangeFilter` live in the toolbar and applied filters show as chips.
@@ -74,6 +78,43 @@ src/
 - **Attendance**: `/attendance` has Staff | Members views (`?view=`), `/attendance/qr` the branch posters, gym
   location and linked phones (`attendance:qr`). `/checkin/:token?type=in|out` is the public, phone-sized scan page
   (outside `RequireAuth`) — it talks only to `checkinApi` (`/public/checkin/...`). QR images come from `qrcode`.
+- **Enquiry form**: `/enquiry/:token` is the public, phone-sized form (outside `RequireAuth`, `publicEnquiryApi`); a
+  submit becomes a lead. Leads → "Enquiry form" (`EnquiryLinkModal`) shows the branch link, QR, copy, WhatsApp share,
+  printable poster and "New link".
+- **Gym Settings** (`/gym-settings`, `gym:manage`, `features/gym`): gym profile (logo, name, tagline, contacts, GSTIN,
+  address, invoice footer), terms & conditions PDF (linked in the welcome WhatsApp message) and branches
+  (`BranchFormDrawer`: contacts, head office, admin login, reset password). Invoices / sidebar / enquiry form read the
+  letterhead and logo from the API — never hard-code gym details.
+- **Configuration** (`/configuration`, `setting:manage`, `features/settings`): trial class, freeze / transfer / refund,
+  renewal days, staff late grace, gym-wide. Desk screens read the values with `useDeskSettings()` (trial offer on Leads, Renewals default window) —
+  never hard-code 7 / 30 days or trial lengths.
+- **Trial class**: Leads → "Trials" tab; `TrialModal` (dumbbell action / trial chip under the status) books, records the
+  fee, marks a visit a day, cancels while nothing is recorded. The public form shows "Book a … trial" only when enabled.
+- **Membership actions** (`features/memberships`): member page → "Freeze / Transfer / Cancel" opens
+  `MembershipActionsDrawer` (`membership:manage`); every limit and "why not" comes from GET
+  `/memberships/member/{id}` — don't re-implement the rules. Proof files via `DocumentField` / `readDocument`
+  (base64), opened with `openDocument`. Refunds list: Payments → Refunds (`RefundsDrawer`).
+- **Members "Not coming"** tab (`absent`) shows last visit + a WhatsApp check-in message. **Client assessment** lives on
+  the member page (`AssessmentSection` / `AssessmentDrawer`). PT "Log session" can open a WhatsApp session summary.
+- **Referrals** (`/referrals`, `features/referrals`): this month's reward card (or the "contact admin" warning),
+  tabs Eligible this month / Pending to give / Rewarded, `RewardProgramModal` (tiers per month),
+  `MemberReferralsDrawer` (direct referrals only, month by month with the reward earned). The multi-level org chart
+  is kept aside in `ReferralNetworkChart.tsx` (not used on any screen). "Referred by" uses `<MemberPicker>` on the
+  member form and REFERRAL leads; Members rows have a referrals action disabled when `referral_count` is 0.
+- **Discounts** come only from the Offers master: billing forms use `<OfferSelect>` (fills `offer_id` /
+  `discount_amount` / `discount_reason`); never hard-code discount reasons. Pass `lines` (`{categoryId, amount}` per
+  billed plan) so it lists only offers that fit those plan categories.
+- **Plans**: categories come from the DB master (`usePlanCategories`, managed in `ManageCategoriesModal`); never
+  hard-code categories. Show durations with `planDuration`, prices per month with `planUnitPrice`, badges with
+  `<PlanBadges>`. Billing dropdowns use `usePlanLookup(type, true, true)` (on-sale plans only). Group packages use
+  `GroupMembersField`; plans with `id_check` need an "ID verified" checkbox.
+- **Members**: `/members/new` is the 3-step wizard (profile → plan → payment). View / edit of an existing member is
+  the profile only plus the Membership card (`MembershipHistory`); plans are changed only through `RenewDrawer`
+  (Renew | Upgrade tabs; also opened from Members, Subscriptions and Renewals rows). Upgrade lists every membership
+  plan from GET `/subscriptions/member/{id}/upgrade`; ineligible ones stay visible but disabled with their reason.
+- **"All Branches"** is read-only: use `useWriteAccess(permission)` → keep Add / Edit visible but `disabled`, with
+  `reason` as the tooltip (`ActionIcon disabled disabledReason`).
+- **WhatsApp**: click-to-chat via `openWhatsApp`; invoices are shared with `sendInvoiceOnWhatsApp` (no-login `/i/:token` link).
 - Invoices open in a new tab: `window.open(\`/invoice/${paymentId}\`, "_blank")`.
 
 ## Commands

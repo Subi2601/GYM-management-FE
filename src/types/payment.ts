@@ -50,6 +50,11 @@ export interface PaymentStats {
   last_6_months: number;
   last_12_months: number;
   total: number;
+  /** Paid back on cancelled memberships (collections above are before refunds). */
+  refunds_today: number;
+  refunds_this_month: number;
+  refunds_last_month: number;
+  refunds_total: number;
 }
 
 export interface InvoiceMember {
@@ -81,6 +86,22 @@ export interface Invoice {
   branch_location: string | null;
   member: InvoiceMember;
   lines: InvoiceLine[];
+  /** Upgrade bill: what the previous plan cost, taken off (lines total − credit = gross). */
+  credit_amount: number;
+  credit_label: string | null;
+  /** "Diwali: +1 month, Free Protein shaker" */
+  offer_bonus: string | null;
+  /** Gym ID */
+  gym_code: string | null;
+  /** Letterhead from Gym Settings (branch contacts / GSTIN override the gym's). */
+  tagline: string | null;
+  phone: string | null;
+  email: string | null;
+  gstin: string | null;
+  invoice_footer: string | null;
+  logo_url: string | null;
+  /** Public terms & conditions PDF (sent with the welcome message). */
+  terms_url: string | null;
   gross: number;
   discount_amount: number;
   discount_reason: string | null;
@@ -88,4 +109,6 @@ export interface Invoice {
   paid_amount: number;
   balance_amount: number;
   balance_due_date: string | null;
+  /** Signed id for the no-login link sent to the member (/i/<token>). */
+  share_token: string;
 }
