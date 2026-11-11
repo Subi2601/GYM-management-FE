@@ -40,6 +40,7 @@ export default defineConfig(({ mode }) => {
           navigateFallbackDenylist: [/^\/api\//],
           cleanupOutdatedCaches: true,
         },
+        
       }),
     ],
     resolve: {
@@ -50,6 +51,11 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/api": { target, changeOrigin: true },
       },
+    },
+    // Phone testing of the built app through an HTTPS tunnel (VS Code ports / cloudflared / ngrok);
+    // Vite blocks unknown hosts otherwise. The /api proxy above is reused by `vite preview`.
+    preview: {
+      allowedHosts: [".devtunnels.ms", ".trycloudflare.com", ".ngrok-free.app"],
     },
   };
 });
