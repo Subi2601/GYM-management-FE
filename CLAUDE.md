@@ -116,10 +116,17 @@ src/
   `reason` as the tooltip (`ActionIcon disabled disabledReason`).
 - **WhatsApp**: click-to-chat via `openWhatsApp`; invoices are shared with `sendInvoiceOnWhatsApp` (no-login `/i/:token` link).
 - Invoices open in a new tab: `window.open(\`/invoice/${paymentId}\`, "_blank")`.
+- **PWA** (`vite-plugin-pwa`, config in `vite.config.ts`): installable app (manifest + icons in `public/`, made from a
+  red tile with "S"). The service worker precaches only the built app shell — **never cache `/api`** (live data,
+  per-login access; `navigateFallbackDenylist` keeps it out). `registerType: "prompt"`: `PwaUpdatePrompt` (mounted in
+  `App.tsx`) shows "New version… Reload" instead of reloading under a half-filled form; open apps check hourly.
+  The service worker runs only in builds (`npm run build` + `npm run preview`), not in `npm run dev`. Install needs
+  HTTPS (or localhost).
 
 ## Commands
 ```
 npm run dev        # http://localhost:5173 (proxies /api → http://127.0.0.1:8001; override with VITE_API_PROXY_TARGET)
 npm run typecheck
 npm run build
+npm run preview    # serves the build on :4173 with the service worker (PWA install / update testing)
 ```

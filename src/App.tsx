@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-route
 
 import { ConfirmHost } from "@/components/ui/ConfirmDialog";
 import { PageLoader } from "@/components/ui/Loaders";
+import { PwaUpdatePrompt } from "@/components/ui/PwaUpdatePrompt";
 import { Toaster } from "@/components/ui/Toaster";
 import { BranchSelectionPage } from "@/features/auth/pages/BranchSelectionPage";
 import { LoginPage } from "@/features/auth/pages/LoginPage";
@@ -77,6 +78,7 @@ export default function App() {
           <SessionExpiryBridge />
           <Toaster />
           <ConfirmHost />
+          <PwaUpdatePrompt />
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
