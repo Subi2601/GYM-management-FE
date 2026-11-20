@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { confirm } from "@/components/ui/ConfirmDialog";
-import { ActionGroup, ActionIcon, DataTable, ROW_MARKER } from "@/components/ui/DataTable";
+import { ActionIcon, DataTable, ROW_MARKER } from "@/components/ui/DataTable";
 import { Icon } from "@/components/ui/Icon";
 import { DateRangeFilter, FilterSelect, FilterTabs, ListToolbar, type ActiveFilter } from "@/components/ui/ListToolbar";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { RowMenu } from "@/components/ui/RowMenu";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { goalLabel } from "@/features/lookups/fitness-goals";
 import { leadApi, useInvalidateLeads, useLeadAttendants, useLeadCounts, useLeads } from "@/features/leads/api";
@@ -18,6 +19,7 @@ import { LeadHistoryDrawer } from "@/features/leads/components/LeadHistoryDrawer
 import { TrialModal, trialFeeDue, trialLabel } from "@/features/leads/components/TrialModal";
 import { useDeskSettings } from "@/features/settings/api";
 import { addDays, daysUntil, relativeDays, SOURCE_META, SourceLabel } from "@/features/leads/lead-meta";
+import { useLeadThanks } from "@/features/leads/lead-whatsapp";
 import { useInvalidateMembers } from "@/features/members/api";
 import { paginationProps, useAddAction, useListState, useUrlEnum } from "@/hooks/use-list-state";
 import { formatDate, todayISO } from "@/lib/format";
@@ -137,6 +139,7 @@ export function LeadsPage() {
   const [trialFor, setTrialFor] = useState<Lead | null>(null);
   const trialOffer = useDeskSettings();
   const trialsOn = !!trialOffer.data?.trial_enabled;
+  const sendThanks = useLeadThanks();
 
   const { setPage } = list;
   // Tab / filter changes restart from page 1.
@@ -211,20 +214,11 @@ export function LeadsPage() {
             <div><TrialChip lead={row.original} onOpen={() => setTrialFor(row.original)} /></div>
           </div>
         ) },
+      // Kept to one line each: who took the enquiry and the location are in Notes & history / Edit.
       { accessorKey: "source", header: "Source", meta: { width: "160px", sortKey: sortKey("source") },
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <SourceLabel source={row.original.source} />
-            <div className="truncate text-xs text-muted">by {row.original.attended_by_name ?? (row.original.source === "ENQUIRY_FORM" ? "online form" : "—")}</div>
-          </div>
-        ) },
+        cell: ({ row }) => <SourceLabel source={row.original.source} /> },
       { accessorKey: "goal", header: "Goal", meta: { width: "170px" },
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <div className="truncate">{goalLabel(row.original.goal) ?? "—"}</div>
-            {row.original.location && <div className="truncate text-xs text-muted">{row.original.location}</div>}
-          </div>
-        ) },
+        cell: ({ row }) => <div className="truncate">{goalLabel(row.original.goal) ?? "—"}</div> },
       { accessorKey: "plan_to_join_date", header: "Plan to join", meta: { width: "130px", sortKey: sortKey("plan_to_join_date") },
         cell: ({ row }) => <DateCell date={row.original.plan_to_join_date} today={today} past="ago" /> },
       { accessorKey: "next_follow_up_date", header: "Next follow-up",
@@ -234,45 +228,67 @@ export function LeadsPage() {
             past={isOpen(row.original) ? "overdue" : "ago"} tone={followUpTone(row.original, today)} />
         ) },
       {
-        id: "actions", header: "Actions", meta: { width: "300px" },
+        id: "actions", header: "Actions", meta: { width: "200px" },
         cell: ({ row }) => {
           const lead = row.original;
           return (
-            <ActionGroup>
-              {update.show && !lead.converted_member_id && (
-                <span title={update.reason} className="inline-flex">
-                  <Button variant="secondary" className={cn(ROW_BUTTON, ROW_TONE.yellow)} disabled={update.disabled}
-                    onClick={() => setFollowUpFor(lead)}>
+            // Three fixed slots (Follow-up | WhatsApp | ⋯) so the buttons line up row to row even when one is absent.
+            <div className="grid grid-cols-[96px_32px_32px] items-center justify-center gap-1.5">
+              <span title={update.reason} className="inline-flex">
+                {update.show && !lead.converted_member_id && (
+                  <Button variant="secondary" className={cn(ROW_BUTTON, ROW_TONE.yellow, "w-full whitespace-nowrap px-2")}
+                    disabled={update.disabled} onClick={() => setFollowUpFor(lead)}>
                     Follow-up
                   </Button>
+                )}
+              </span>
+              <span className="inline-flex">
+                {isOpen(lead) && lead.source === "ENQUIRY_FORM" && (
+                  // Online enquiries never got the thank-you (it opens on save only for leads added at the desk), so
+                  // their WhatsApp button stays on the row. Read-only: the desk presses Send.
+                  <ActionIcon kind="whatsapp" title="Send thank-you on WhatsApp" onClick={() => sendThanks(lead)} />
+                )}
+              </span>
+              <span className="inline-flex">
+              {converting === lead.id ? (
+                <span className="action-icon pointer-events-none" aria-label="Converting">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-line border-t-accent" />
                 </span>
+              ) : (
+                // Daily actions stay on the row; the rest sit in the "⋯" menu.
+                <RowMenu items={[
+                  // Desk-added leads already got it on save: "Resend" lives here. Enquiry-form leads have the row
+                  // button instead, so each lead shows the WhatsApp action exactly once.
+                  ...(isOpen(lead) && lead.source !== "ENQUIRY_FORM" ? [{
+                    label: "Resend thank-you on WhatsApp", icon: "whatsapp" as const, onClick: () => sendThanks(lead),
+                  }] : []),
+                  ...(update.show && isOpen(lead) && (lead.trial_start || trialsOn) ? [{
+                    label: lead.trial_start ? "Trial class" : "Book a trial", icon: "dumbbell" as const,
+                    disabled: update.disabled, disabledReason: update.reason, onClick: () => setTrialFor(lead),
+                  }] : []),
+                  ...(conv.show && lead.status !== "JOINED" ? [{
+                    label: "Convert to member", icon: "userCheck" as const,
+                    disabled: conv.disabled || convert.isPending, disabledReason: conv.reason,
+                    onClick: () => void onConvert(lead),
+                  }] : []),
+                  { label: "Notes & history", icon: "eye" as const, onClick: () => setHistoryFor(lead) },
+                  ...(update.show ? [{
+                    label: "Edit", icon: "edit" as const, disabled: update.disabled, disabledReason: update.reason,
+                    onClick: () => { setEditing(lead); setFormOpen(true); },
+                  }] : []),
+                  ...(del.show ? [{
+                    label: "Delete", icon: "trash" as const, danger: true, disabled: del.disabled,
+                    disabledReason: del.reason, onClick: () => void onDelete(lead),
+                  }] : []),
+                ]} />
               )}
-              {conv.show && lead.status !== "JOINED" && (
-                <span title={conv.reason} className="inline-flex">
-                  <Button variant="secondary" className={cn(ROW_BUTTON, ROW_TONE.green)} disabled={conv.disabled}
-                    loading={converting === lead.id} onClick={() => void onConvert(lead)}>
-                    Convert
-                  </Button>
-                </span>
-              )}
-              {update.show && isOpen(lead) && (lead.trial_start || trialsOn) && (
-                <ActionIcon kind="trial" title={lead.trial_start ? "Trial class" : "Book a trial"}
-                  disabled={update.disabled} disabledReason={update.reason} onClick={() => setTrialFor(lead)} />
-              )}
-              <ActionIcon kind="view" title="Notes & history" onClick={() => setHistoryFor(lead)} />
-              {update.show && (
-                <ActionIcon kind="edit" disabled={update.disabled} disabledReason={update.reason}
-                  onClick={() => { setEditing(lead); setFormOpen(true); }} />
-              )}
-              {del.show && (
-                <ActionIcon kind="delete" disabled={del.disabled} disabledReason={del.reason} onClick={() => void onDelete(lead)} />
-              )}
-            </ActionGroup>
+              </span>
+            </div>
           );
         },
       },
     ];
-  }, [update, conv, del, remove, convert, trialsOn]);
+  }, [update, conv, del, remove, convert, trialsOn, sendThanks]);
 
   const clearDates = () => {
     setDue("");

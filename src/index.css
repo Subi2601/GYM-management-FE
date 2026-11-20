@@ -438,6 +438,9 @@
   .action-icon.trial {
     @apply hover:border-line-accent hover:bg-accent-light hover:text-accent;
   }
+  .action-icon.whatsapp {
+    @apply hover:border-success hover:bg-success-soft hover:text-success;
+  }
   .action-icon.edit {
     @apply hover:border-success hover:bg-success-soft hover:text-success;
   }

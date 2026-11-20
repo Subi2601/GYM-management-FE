@@ -252,7 +252,7 @@ function PaginationBar({ page, pageSize, total, onPageChange, onPageSizeChange }
 }
 
 interface ActionButtonProps {
-  kind: "view" | "edit" | "delete" | "print" | "renew" | "trial" | "tree";
+  kind: "view" | "edit" | "delete" | "print" | "renew" | "trial" | "tree" | "whatsapp";
   title?: string;
   onClick: () => void;
   /** Greyed out, not clickable; `disabledReason` becomes the tooltip (e.g. "All Branches" is selected). */
@@ -261,7 +261,7 @@ interface ActionButtonProps {
 }
 
 const ACTION_ICON = { view: "eye", edit: "edit", delete: "trash", print: "print", renew: "trending",
-  trial: "dumbbell", tree: "tree" } as const;
+  trial: "dumbbell", tree: "tree", whatsapp: "whatsapp" } as const;
 
 /** Square icon buttons used in the Actions column. */
 export function ActionIcon({ kind, title, onClick, disabled = false, disabledReason }: ActionButtonProps) {

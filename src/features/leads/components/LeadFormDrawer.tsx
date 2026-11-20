@@ -13,6 +13,7 @@ import { FormDivider, GRID_2 } from "@/components/ui/Section";
 import { leadApi, useInvalidateLeads } from "@/features/leads/api";
 import { DateWithDays } from "@/features/leads/components/DateWithDays";
 import { SOURCE_GROUPS } from "@/features/leads/lead-meta";
+import { useLeadThanks } from "@/features/leads/lead-whatsapp";
 import { FitnessGoalSelect, requiredGoalField } from "@/features/lookups/fitness-goals";
 import { MemberPicker } from "@/features/lookups/MemberPicker";
 import { formatDateTime } from "@/lib/format";
@@ -24,7 +25,7 @@ import type { Lead, LeadInput } from "@/types/lead";
 
 const FORM_ID = "lead-form";
 
-// Mirrors LeadCreate: everything required except notes; phone 10 digits; the source is one of LEAD_SOURCES.
+// Mirrors LeadCreate: everything required except plan to join and notes; phone 10 digits; source one of LEAD_SOURCES.
 const schema = z.object({
   name: z.string().trim().min(1, "Full name is required").max(120, "Max 120 characters"),
   phone: z.string().trim().regex(/^\d{10}$/, "Enter a valid 10-digit mobile number"),
@@ -33,7 +34,8 @@ const schema = z.object({
     .refine((v): boolean => v !== "", "Select how the enquiry came in"),
   goal: requiredGoalField("Select the client's goal"),
   status: z.enum(LEAD_STATUSES),
-  plan_to_join_date: z.string().min(1, "Plan to join date is required"),
+  /** Optional: walk-in / phone enquiries often have no joining date yet ("" = not decided). */
+  plan_to_join_date: z.string(),
   next_follow_up_date: z.string().min(1, "Next follow-up date is required"),
   notes: z.string().max(5000, "Max 5000 characters"),
   /** Source REFERRAL: the member who sent them ("" = not picked). */
@@ -56,7 +58,7 @@ function toForm(lead: Lead): FormValues {
     status: lead.status,
     plan_to_join_date: lead.plan_to_join_date ?? "",
     next_follow_up_date: lead.next_follow_up_date ?? "",
-    notes: lead.notes ?? "",
+    notes: "",   // the history isn't edited here (see onSubmit); it lives in Notes & history
     referred_by_id: lead.referred_by_id ?? "",
   };
 }
@@ -73,6 +75,8 @@ export function LeadFormDrawer({ open, lead, onClose }: Props) {
   const invalidate = useInvalidateLeads();
   const myName = useAuthStore((s) => s.me?.user.name);
   const isEdit = lead !== null;
+  // Every new enquiry gets the WhatsApp thank-you right after saving (the desk presses Send).
+  const sendThanks = useLeadThanks();
   const { register, control, handleSubmit, reset, watch, formState: { errors, isValid } } =
     useForm<FormValues>({ resolver: zodResolver(schema), mode: "onChange", defaultValues: EMPTY });
 
@@ -84,6 +88,7 @@ export function LeadFormDrawer({ open, lead, onClose }: Props) {
     mutationFn: (body: LeadInput) => (lead ? leadApi.update(lead.id, body) : leadApi.create(body)),
     onSuccess: async (res) => {
       notify.success(res.message);
+      if (!isEdit) sendThanks(res.data);
       reset(EMPTY);
       onClose();
       await invalidate();
@@ -98,8 +103,13 @@ export function LeadFormDrawer({ open, lead, onClose }: Props) {
 
   const onSubmit = (v: FormValues) => {
     if (!v.goal || !v.source) return; // the schema already requires both; this narrows the types
-    save.mutate({ ...v, goal: v.goal, source: v.source, notes: v.notes.trim() || null,
-      referred_by_id: v.source === "REFERRAL" && v.referred_by_id ? v.referred_by_id : null });
+    const { notes, ...rest } = v;
+    save.mutate({ ...rest, goal: v.goal, source: v.source,
+      plan_to_join_date: v.plan_to_join_date || null,
+      referred_by_id: v.source === "REFERRAL" && v.referred_by_id ? v.referred_by_id : null,
+      // Add: the first note. Edit: notes are left out, so the dated history (enquiry form, trial, follow-ups) is
+      // never overwritten; new notes go in through Follow-up.
+      ...(isEdit ? {} : { notes: notes.trim() || null }) });
   };
 
   // Who took the enquiry: the creator on edit, the signed-in account on add (saved automatically).
@@ -171,8 +181,8 @@ export function LeadFormDrawer({ open, lead, onClose }: Props) {
               {LEAD_STATUSES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
             </Select>
           </Field>
-          <Field label="Plan to join" htmlFor="lead-ptj" error={errors.plan_to_join_date?.message} required
-            hint="Pick a date or type the days from today" className="md:col-span-2">
+          <Field label="Plan to join" htmlFor="lead-ptj" error={errors.plan_to_join_date?.message}
+            hint="Optional. Pick a date or type the days from today" className="md:col-span-2">
             <Controller name="plan_to_join_date" control={control} render={({ field }) => (
               <DateWithDays id="lead-ptj" value={field.value} onChange={field.onChange} onBlur={field.onBlur}
                 invalid={!!errors.plan_to_join_date} />
@@ -187,12 +197,19 @@ export function LeadFormDrawer({ open, lead, onClose }: Props) {
           </Field>
         </div>
 
-        <FormDivider>Notes</FormDivider>
-        <Field label="Notes / history" htmlFor="lead-notes" error={errors.notes?.message}
-          hint={isEdit ? "Follow-ups are appended here as dated entries" : undefined}>
-          <Textarea id="lead-notes" rows={5} placeholder="Enter notes or follow-up history"
-            invalid={!!errors.notes} {...register("notes")} />
-        </Field>
+        {!isEdit && (
+          <>
+            <FormDivider>Notes</FormDivider>
+            <Field label="Notes" htmlFor="lead-notes" error={errors.notes?.message}>
+              <Textarea id="lead-notes" rows={4} placeholder="Anything to remember about this enquiry (optional)"
+                invalid={!!errors.notes} {...register("notes")} />
+            </Field>
+            <p className="m-0 mt-4 flex items-center gap-2 text-xs text-muted">
+              <Icon name="whatsapp" className="h-4 w-4 shrink-0 text-success" />
+              After saving, WhatsApp opens with the thank-you message ready. Just press Send.
+            </p>
+          </>
+        )}
       </form>
     </Drawer>
   );

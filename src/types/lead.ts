@@ -74,7 +74,8 @@ export interface LeadInput {
   goal: FitnessGoal;
   source: LeadSource;
   status: LeadStatus;
-  plan_to_join_date: string;
+  /** null = not decided yet (optional). */
+  plan_to_join_date: string | null;
   next_follow_up_date: string;
   notes?: string | null;
   referred_by_id?: string | null;

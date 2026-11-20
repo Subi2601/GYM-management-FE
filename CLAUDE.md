@@ -66,7 +66,9 @@ src/
   Server pagination + sorting via `useListState` → `pagination={paginationProps(list, total)}` and
   `sorting={list.sorting}`; a column is sortable when `meta.sortKey` is set (the API's `sort_by` value).
   Status values via `<StatusBadge>`, money via `formatINR` (right-aligned), dates via `formatDate` (DD-MM-YYYY).
-  The actions column has `id: "actions"`, the header "Actions", and is last.
+  The actions column has `id: "actions"`, the header "Actions", and is last. Keep at most 2–3 daily actions on the
+  row and put the rest in `<RowMenu items=[…]>` ("⋯", portalled so the table never clips it; leave out items the
+  user can't do, pass `disabled` + `disabledReason` for "All Branches"). Leads is the first screen using it.
 - **Sidebar**: one link per screen (no sub-menus, no "Add …" links). Add a screen to `NAV` in `nav-config.ts`.
 - **Destructive actions** ask first: `if (await confirm("…")) mutate()`.
 - **Styling**: Tailwind utilities with the Stag tokens from `tailwind.config.ts` (`text-ink`, `text-muted`,
@@ -115,6 +117,14 @@ src/
 - **"All Branches"** is read-only: use `useWriteAccess(permission)` → keep Add / Edit visible but `disabled`, with
   `reason` as the tooltip (`ActionIcon disabled disabledReason`).
 - **WhatsApp**: click-to-chat via `openWhatsApp`; invoices are shared with `sendInvoiceOnWhatsApp` (no-login `/i/:token` link).
+  Leads thank-you (`features/leads/lead-whatsapp.ts`, `useLeadThanks()`): booked trial → its dates (+ fee if due), no
+  trial → the gym's trial offer from `useDeskSettings()`. Saving a new lead always opens it (no option). Each open
+  lead shows the action once: row 💬 for ENQUIRY_FORM leads (they never got it), "Resend thank-you on WhatsApp" in
+  the ⋯ menu for desk-added leads. Read-only (nothing recorded), so it also works in "All Branches". The public enquiry form's
+  thank-you screen has "Chat with us on WhatsApp" (visitor → the first mobile in `contact_phone`, landlines skipped;
+  no mobile = no button). "Plan to join" is optional on leads.
+  Lead `notes` is the dated history (enquiry form, trial, follow-ups): Add lead takes a first note; Edit lead never
+  shows or sends `notes` (sending it would overwrite the history) — new notes go in through Follow-up.
 - Invoices open in a new tab: `window.open(\`/invoice/${paymentId}\`, "_blank")`.
 - **PWA** (`vite-plugin-pwa`, config in `vite.config.ts`): installable app (manifest + icons in `public/`, made from a
   red tile with "S"). The service worker precaches only the built app shell — **never cache `/api`** (live data,

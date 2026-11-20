@@ -7,11 +7,11 @@ import { z } from "zod";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, Input, Textarea } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
-import { publicEnquiryApi, type JoinWhen, type PreferredTime } from "@/features/leads/enquiry-api";
+import { publicEnquiryApi, type EnquiryResult, type JoinWhen, type PreferredTime } from "@/features/leads/enquiry-api";
 import { FitnessGoalSelect, goalField } from "@/features/lookups/fitness-goals";
 import { toApiError } from "@/lib/api-error";
 import { addDaysISO, formatDate, formatINR, todayISO } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { cn, openWhatsApp } from "@/lib/utils";
 
 const TIMES: { value: PreferredTime; label: string }[] = [
   { value: "MORNING", label: "Morning" }, { value: "AFTERNOON", label: "Afternoon" }, { value: "EVENING", label: "Evening" },
@@ -39,6 +39,28 @@ type Values = z.infer<typeof schema>;
 
 const trialTitle = (days: number, fee: number) =>
   `${fee > 0 ? "Book a" : "Book a free"} ${days}-day trial`;
+
+/**
+ * The first Indian mobile in the gym's contact field ("044-2345678 / +91 98400 12345" → "9840012345"); landlines
+ * (no WhatsApp) are skipped. null = no mobile → no WhatsApp button.
+ */
+function firstMobile(contact: string | null | undefined): string | null {
+  for (const part of (contact ?? "").split(/[,/;|]|\bor\b/i)) {
+    const last10 = part.replace(/\D/g, "").slice(-10);
+    if (/^[6-9]\d{9}$/.test(last10)) return last10;
+  }
+  return null;
+}
+
+/** What the visitor sends the gym from the thank-you screen (their own WhatsApp, prefilled). */
+function enquiryChatText(gymName: string, branch: string, done: EnquiryResult): string {
+  const lines = [`Hi ${gymName} 👋`, `I'm ${done.name}. I just sent an enquiry for your ${branch} branch.`];
+  if (done.trial_start && done.trial_end) {
+    lines.push(`I've booked a trial from ${formatDate(done.trial_start)} to ${formatDate(done.trial_end)}.`);
+  }
+  lines.push("Please share the plans and details. Thank you!");
+  return lines.join("\n");
+}
 
 /**
  * /enquiry/:token — public, phone-sized enquiry form (no login) opened from the branch's link or QR poster.
@@ -74,6 +96,7 @@ export function EnquiryFormPage() {
     submit.mutate(v);
   };
   const done = submit.data?.data;
+  const gymWhatsApp = firstMobile(gym?.contact_phone);
 
 
   return (
@@ -115,6 +138,14 @@ export function EnquiryFormPage() {
                 <p className="m-0 text-sm text-secondary-grey">You've already had a trial with us, so our team will call you about plans.</p>
               ) : null}
               <p className="m-0 text-sm text-secondary-grey">Our team at {gym.branch_name} will call you soon.</p>
+              {gymWhatsApp && (
+                // Click-to-chat from the visitor's own WhatsApp: the gym gets the chat (and their number) at once.
+                <button type="button" onClick={() => openWhatsApp(gymWhatsApp, enquiryChatText(gym.organization_name,
+                  gym.branch_name, done))}
+                  className="mt-2 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border-none bg-success px-5 py-3 text-sm font-bold text-white transition-opacity hover:opacity-90">
+                  <Icon name="whatsapp" className="h-5 w-5" />Chat with us on WhatsApp
+                </button>
+              )}
               {gym.contact_phone && (
                 <a href={`tel:${gym.contact_phone}`} className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-accent no-underline">
                   <Icon name="phone" className="h-4 w-4" />Can't wait? Call {gym.contact_phone}
