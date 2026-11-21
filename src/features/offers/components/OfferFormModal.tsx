@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { AvailableInField, defaultAvailableIn, type AvailableIn } from "@/components/ui/AvailableInField";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, Input, Textarea } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
@@ -12,6 +13,8 @@ import { MultiSelect } from "@/components/ui/MultiSelect";
 import { offerApi, useInvalidateOffers } from "@/features/offers/api";
 import { usePlanCategories } from "@/features/plans/api";
 import { notify } from "@/lib/notify";
+import { useCan } from "@/stores/auth-store";
+import { useBranchStore } from "@/stores/branch-store";
 import type { Offer, OfferInput } from "@/types/offer";
 
 const FORM_ID = "offer-form";
@@ -31,33 +34,39 @@ const schema = z.object({
   description: z.string().trim().max(200, "Max 200 characters"),
   is_active: z.boolean(),
   category_ids: z.array(z.string()),
+  /** "all" = common offer (every branch); only all-branch roles see / send it. */
+  available_in: z.enum(["branch", "all"]),
 }).refine((v) => !v.valid_from || !v.valid_to || v.valid_to >= v.valid_from,
   { path: ["valid_to"], message: "Must be on or after the start date" })
   .refine((v) => v.discount_percent > 0 || v.extra_months > 0 || v.extra_days > 0 || v.free_item !== "",
     { path: ["discount_percent"], message: "Give a % off, extra time or a free item" });
 type FormValues = z.infer<typeof schema>;
 
-const EMPTY: FormValues = { name: "", discount_percent: 0, extra_months: 0, extra_days: 0, free_item: "", valid_from: "",
-  valid_to: "", description: "", is_active: true, category_ids: [] };
+const empty = (availableIn: AvailableIn): FormValues => ({ name: "", discount_percent: 0, extra_months: 0, extra_days: 0,
+  free_item: "", valid_from: "", valid_to: "", description: "", is_active: true, category_ids: [], available_in: availableIn });
 
 const toForm = (o: Offer): FormValues => ({
   name: o.name, discount_percent: o.discount_percent, extra_months: o.extra_months, extra_days: o.extra_days,
   free_item: o.free_item ?? "", valid_from: o.valid_from ?? "", valid_to: o.valid_to ?? "",
   description: o.description ?? "", is_active: o.is_active, category_ids: o.category_ids,
+  available_in: o.common ? "all" : "branch",
 });
 
 /** Add / edit an offer (short form → modal). */
 export function OfferFormModal({ open, offer, onClose }: { open: boolean; offer: Offer | null; onClose: () => void }) {
   const invalidate = useInvalidateOffers();
   const categories = usePlanCategories();
+  const canCommon = useCan("branch:switch");
+  const branchSelected = useBranchStore((s) => Boolean(s.selectedBranchId));
+  const newAvailableIn = defaultAvailableIn(canCommon, branchSelected);
   const { register, control, handleSubmit, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: EMPTY,
+    defaultValues: empty(newAvailableIn),
   });
 
   useEffect(() => {
-    if (open) reset(offer ? toForm(offer) : EMPTY);
-  }, [open, offer, reset]);
+    if (open) reset(offer ? toForm(offer) : empty(newAvailableIn));
+  }, [open, offer, reset, newAvailableIn]);
 
   const save = useMutation({
     mutationFn: (body: OfferInput) => (offer ? offerApi.update(offer.id, body) : offerApi.create(body)),
@@ -74,6 +83,8 @@ export function OfferFormModal({ open, offer, onClose }: { open: boolean; offer:
     free_item: v.free_item || null, valid_from: v.valid_from || null,
     valid_to: v.valid_to || null, description: v.description.trim() || null, is_active: v.is_active,
     category_ids: v.category_ids,
+    // Others never send it: a new offer is their branch's, an edit keeps where the offer is.
+    ...(canCommon ? { common: v.available_in === "all" } : {}),
   });
 
   return (
@@ -91,6 +102,13 @@ export function OfferFormModal({ open, offer, onClose }: { open: boolean; offer:
     >
       <form id={FORM_ID} onSubmit={handleSubmit(onSubmit)} noValidate>
         <div className={GRID_2}>
+          {canCommon && (
+            <div className="md:col-span-2">
+              <Controller name="available_in" control={control} render={({ field }) => (
+                <AvailableInField id="of-available-in" what="offer" value={field.value} onChange={field.onChange} />
+              )} />
+            </div>
+          )}
           <Field label="Offer name" htmlFor="of-name" required error={errors.name?.message}>
             <Input id="of-name" maxLength={80} placeholder="e.g. Diwali Offer" invalid={!!errors.name} {...register("name")} />
           </Field>

@@ -12,9 +12,11 @@ import { formatPercent, offerApi, useInvalidateOffers, useOfferCounts, useOffers
 import { OfferFormModal } from "@/features/offers/components/OfferFormModal";
 import { usePlanCategories } from "@/features/plans/api";
 import { paginationProps, useAddAction, useListState, useUrlEnum } from "@/hooks/use-list-state";
-import { useWriteAccess } from "@/hooks/use-write-access";
+import { BranchScopeBadge, useBranchNames } from "@/components/ui/BranchScopeBadge";
+import { useSharedWriteAccess } from "@/hooks/use-write-access";
 import { formatDate } from "@/lib/format";
 import { notify } from "@/lib/notify";
+import { useBranchStore } from "@/stores/branch-store";
 import { OFFER_TABS, type Offer } from "@/types/offer";
 
 const TAB_LABEL = { active: "Active", inactive: "Inactive", all: "All offers" } as const;
@@ -30,7 +32,10 @@ function validity(o: Offer): string {
 export function OffersPage() {
   const [tab, setTab] = useUrlEnum("tab", OFFER_TABS, "active");
   const list = useListState({ sortDir: "asc" });
-  const write = useWriteAccess("offer:manage");
+  const access = useSharedWriteAccess("offer:manage");
+  const write = access.add;
+  const branch = useBranchStore((s) => s.selectedBranchId);
+  const branchName = useBranchNames();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Offer | null>(null);
 
@@ -62,7 +67,10 @@ export function OffersPage() {
     { accessorKey: "name", header: "Offer", meta: { sortKey: "name" },
       cell: ({ row }) => (
         <div className="min-w-0">
-          <div className="truncate font-semibold text-ink">{row.original.name}</div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-semibold text-ink">{row.original.name}</span>
+            <BranchScopeBadge branchId={row.original.branch_id} showBranch={!branch} branchName={branchName} />
+          </div>
           {row.original.description && <div className="truncate text-xs text-muted">{row.original.description}</div>}
         </div>
       ) },
@@ -97,21 +105,22 @@ export function OffersPage() {
       id: "actions", header: "Actions", meta: { width: "200px" },
       cell: ({ row }) => {
         const o = row.original;
-        if (!write.show) return null;
+        const rowWrite = access.row(o.common);
+        if (!rowWrite.show) return null;
         return (
           <ActionGroup>
-            <span title={write.reason}>
-              <Button variant="secondary" className="h-8 px-3 py-0 text-xs" disabled={write.disabled || toggle.isPending}
+            <span title={rowWrite.reason}>
+              <Button variant="secondary" className="h-8 px-3 py-0 text-xs" disabled={rowWrite.disabled || toggle.isPending}
                 loading={toggle.isPending && toggle.variables?.id === o.id} onClick={() => toggle.mutate(o)}>
                 {o.is_active ? "Deactivate" : "Activate"}
               </Button>
             </span>
-            {write.allowed && <ActionIcon kind="edit" onClick={() => { setEditing(o); setFormOpen(true); }} />}
+            {rowWrite.allowed && <ActionIcon kind="edit" onClick={() => { setEditing(o); setFormOpen(true); }} />}
           </ActionGroup>
         );
       },
     },
-  ], [write, toggle, categoryName]);
+  ], [access, toggle, categoryName, branch, branchName]);
 
   const data = offers.data;
   return (

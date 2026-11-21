@@ -103,6 +103,11 @@ src/
   `MemberReferralsDrawer` (direct referrals only, month by month with the reward earned). The multi-level org chart
   is kept aside in `ReferralNetworkChart.tsx` (not used on any screen). "Referred by" uses `<MemberPicker>` on the
   member form and REFERRAL leads; Members rows have a referrals action disabled when `referral_count` is 0.
+- **Common plans / offers** (`common: true`, `branch_id: null`) show in every branch. All-branch roles (`branch:switch`)
+  get `<AvailableInField>` ("All branches (common)" / "Only <branch>") in the plan and offer forms and can add / edit
+  common rows from "All Branches" too; use `useSharedWriteAccess(permission)` (`.add`, `.row(common)`) instead of
+  `useWriteAccess` on those screens. Rows show `<BranchScopeBadge>`. The plan's `all_branches` flag is only
+  "check in at any branch", not common.
 - **Discounts** come only from the Offers master: billing forms use `<OfferSelect>` (fills `offer_id` /
   `discount_amount` / `discount_reason`); never hard-code discount reasons. Pass `lines` (`{categoryId, amount}` per
   billed plan) so it lists only offers that fit those plan categories.

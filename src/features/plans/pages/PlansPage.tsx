@@ -17,7 +17,8 @@ import { PlanBadges } from "@/features/plans/components/PlanBadges";
 import { PlanFormDrawer } from "@/features/plans/components/PlanFormDrawer";
 import { planDuration, planUnitPrice } from "@/features/plans/labels";
 import { paginationProps, useAddAction, useListState, useUrlEnum } from "@/hooks/use-list-state";
-import { useWriteAccess } from "@/hooks/use-write-access";
+import { BranchScopeBadge, useBranchNames } from "@/components/ui/BranchScopeBadge";
+import { useSharedWriteAccess, useWriteAccess } from "@/hooks/use-write-access";
 import { formatINR } from "@/lib/format";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -36,9 +37,11 @@ export function PlansPage() {
   const [params, setParams] = useSearchParams();
   const list = useListState({ pageSize: 50 });
   const [tab, setTab] = useUrlEnum("tab", PLAN_STATUS_TABS, "active");
-  const create = useWriteAccess("plan:create");
-  const update = useWriteAccess("plan:update");
-  const del = useWriteAccess("plan:delete");
+  const create = useSharedWriteAccess("plan:create").add;
+  const updateAccess = useSharedWriteAccess("plan:update");
+  const delAccess = useSharedWriteAccess("plan:delete");
+  const categoriesAccess = useWriteAccess("plan:update");
+  const branchName = useBranchNames();
   const invalidate = useInvalidatePlans();
   /** undefined = closed, null = add, Plan = edit. */
   const [editing, setEditing] = useState<Plan | null | undefined>(undefined);
@@ -93,7 +96,10 @@ export function PlansPage() {
     { accessorKey: "name", header: "Plan", meta: { sortKey: sortKey("name") },
       cell: ({ row }) => (
         <div className={cn("min-w-0 max-w-[280px]", !row.original.is_active && "opacity-60")}>
-          <div className="truncate font-semibold text-ink">{row.original.name}</div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-semibold text-ink">{row.original.name}</span>
+            <BranchScopeBadge branchId={row.original.branch_id} showBranch={!branch} branchName={branchName} />
+          </div>
           <div className="truncate text-xs text-muted">
             {cat ? row.original.description ?? "" : row.original.category_name}
           </div>
@@ -117,6 +123,8 @@ export function PlansPage() {
       id: "actions", header: "Actions", meta: { width: "200px" },
       cell: ({ row }) => {
         const p = row.original;
+        const update = updateAccess.row(p.common);
+        const del = delAccess.row(p.common);
         return (
           <ActionGroup>
             {update.show && (
@@ -139,7 +147,7 @@ export function PlansPage() {
         );
       },
     },
-  ], [cat, tab, update, del, toggle, remove]);
+  ], [cat, tab, updateAccess, delAccess, toggle, remove, branch, branchName]);
 
   const active: ActiveFilter[] = [];
   const catName = cats.find((c) => c.id === cat)?.name;
@@ -153,7 +161,7 @@ export function PlansPage() {
         subtitle="Your packages and prices. Make a plan inactive to stop selling it; members on it keep it"
         actions={
           <>
-            {update.show && (
+            {categoriesAccess.show && (
               <Button variant="secondary" icon={<Icon name="tag" className="h-4 w-4" />} onClick={() => setManaging(true)}>
                 Categories
               </Button>
@@ -175,7 +183,8 @@ export function PlansPage() {
         loading={plans.isLoading}
         fetching={plans.isFetching}
         getRowId={(p) => p.id}
-        onRowClick={update.allowed ? (p) => setEditing(p) : undefined}
+        onRowClick={updateAccess.row(false).allowed || updateAccess.row(true).allowed
+          ? (p) => { if (updateAccess.row(p.common).allowed) setEditing(p); } : undefined}
         emptyIcon="tag"
         emptyMessage={filtered ? "No plans match these filters" : tab === "inactive" ? "No inactive plans" : "No plans yet"}
         emptyHint={filtered ? "Try a different search or clear the filters."

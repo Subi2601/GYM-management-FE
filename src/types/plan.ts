@@ -3,7 +3,10 @@ import type { PlanServiceType, PlanType } from "@/types/enums";
 /** GET /plans — see backend app/schemas/plan.py */
 export interface Plan {
   id: string;
-  branch_id: string;
+  /** null = common plan. */
+  branch_id: string | null;
+  /** Common plan: sold in every branch (only all-branch roles change it). */
+  common: boolean;
   name: string;
   /** Owner-managed category (General, Student, Couple …). */
   category_id: string;
@@ -21,7 +24,7 @@ export interface Plan {
   free_members: number;
   /** Proof the desk must confirm before billing, e.g. "College ID card". */
   id_check: string | null;
-  /** Members on this plan may check in at every branch. */
+  /** Members on this plan may check in at every branch (not the same as `common`). */
   all_branches: boolean;
   /** Days after the start a member on this plan may upgrade to a bigger plan (0 = never). */
   upgrade_window_days: number;
@@ -54,6 +57,8 @@ export interface PlanInput {
   description?: string | null;
   refundable: boolean;
   refund_window_days: number | null;
+  /** true = every branch (all-branch roles only); false = the selected branch. */
+  common?: boolean;
 }
 
 /** GET /plan-categories — the organization's list, in tab order, with plan counts for the selected branch. */

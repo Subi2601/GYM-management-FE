@@ -1,0 +1,32 @@
+# SITE_ADDRESS: the domain (e.g. app.stagfitness.in) → automatic HTTPS.
+# Set it to ":80" to test on a plain IP / locally without a certificate.
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	# API — same origin as the app, so the httpOnly refresh cookie (/api/v1/auth) just works.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /srv
+
+		# Service worker + HTML must never be cached, or phones keep an old build ("New version… Reload" needs this).
+		@nocache path /sw.js /registerSW.js /index.html /manifest.webmanifest /
+		header @nocache Cache-Control "no-cache"
+
+		# Vite puts a content hash in every file name under /assets → cache for a year.
+		header /assets/* Cache-Control "public, max-age=31536000, immutable"
+
+		# React Router: unknown paths (/members/123, /checkin/<token>, /i/<token>) get index.html.
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

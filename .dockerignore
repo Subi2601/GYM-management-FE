@@ -1,0 +1,10 @@
+.git
+.gitignore
+.claude
+node_modules
+dist
+*.tsbuildinfo
+.env.local
+*.md
+Dockerfile
+.dockerignore

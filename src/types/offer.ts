@@ -21,6 +21,10 @@ export interface Offer {
   available: boolean;
   /** Plan categories the % applies to; empty = every plan. */
   category_ids: string[];
+  /** null = common offer. */
+  branch_id: string | null;
+  /** Common offer: available in every branch (only all-branch roles change it). */
+  common: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -46,4 +50,6 @@ export interface OfferInput {
   description: string | null;
   is_active: boolean;
   category_ids: string[];
+  /** true = every branch (all-branch roles only); false = the selected branch. */
+  common?: boolean;
 }

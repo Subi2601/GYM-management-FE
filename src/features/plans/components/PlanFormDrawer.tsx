@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { AvailableInField, defaultAvailableIn, type AvailableIn } from "@/components/ui/AvailableInField";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Field, Input, READONLY_INPUT, Select, Textarea } from "@/components/ui/Field";
 import { Drawer } from "@/components/ui/Modal";
@@ -12,6 +13,8 @@ import { planApi, useInvalidatePlans, usePlanCategories } from "@/features/plans
 import { dayRate, defaultUpgradeWindow, planUnitPrice, SERVICE_LABEL } from "@/features/plans/labels";
 import { formatINR } from "@/lib/format";
 import { notify } from "@/lib/notify";
+import { useCan } from "@/stores/auth-store";
+import { useBranchStore } from "@/stores/branch-store";
 import { PLAN_SERVICE_TYPES, PLAN_TYPES } from "@/types/enums";
 import type { Plan, PlanInput } from "@/types/plan";
 
@@ -48,6 +51,8 @@ const schema = z.object({
   refund_window: optionalInt(0, 3650),
   is_active: z.boolean(),
   description: z.string().max(2000),
+  /** "all" = common plan (every branch); only all-branch roles see / send it. */
+  available_in: z.enum(["branch", "all"]),
 }).superRefine((v, ctx) => {
   const issue = (path: string, message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
   const months = v.bill_by === "months" && v.type === "MEMBERSHIP";
@@ -73,8 +78,9 @@ function customTotal(days: string, perDay: string): number | null {
   return round2(d * p);
 }
 
-function toValues(plan: Plan | null, categoryId: string): FormValues {
+function toValues(plan: Plan | null, categoryId: string, newAvailableIn: AvailableIn): FormValues {
   return {
+    available_in: plan ? (plan.common ? "all" : "branch") : newAvailableIn,
     name: plan?.name ?? "",
     category_id: plan?.category_id ?? categoryId,
     type: plan?.type ?? "MEMBERSHIP",
@@ -108,9 +114,11 @@ interface PlanFormDrawerProps {
 export function PlanFormDrawer({ plan, defaultCategoryId = "", onClose }: PlanFormDrawerProps) {
   const invalidate = useInvalidatePlans();
   const categories = usePlanCategories();
+  const canCommon = useCan("branch:switch");
+  const branchSelected = useBranchStore((s) => Boolean(s.selectedBranchId));
   const { register, control, handleSubmit, watch, setValue, getValues, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: toValues(plan, defaultCategoryId),
+    defaultValues: toValues(plan, defaultCategoryId, defaultAvailableIn(canCommon, branchSelected)),
   });
   const type = watch("type");
   const serviceType = watch("service_type");
@@ -176,6 +184,8 @@ export function PlanFormDrawer({ plan, defaultCategoryId = "", onClose }: PlanFo
       refund_window_days: v.type !== "ADD_ON" && v.refundable && v.refund_window !== "" ? Number(v.refund_window) : null,
       is_active: v.is_active,
       description: v.description.trim() || null,
+      // Others never send it: a new plan is their branch's, an edit keeps where the plan is.
+      ...(canCommon ? { common: v.available_in === "all" } : {}),
     });
   };
 
@@ -201,6 +211,14 @@ export function PlanFormDrawer({ plan, defaultCategoryId = "", onClose }: PlanFo
       <form id={FORM_ID} onSubmit={handleSubmit(onSubmit)} noValidate>
         <FormDivider>Plan</FormDivider>
         <div className={GRID_2}>
+          {canCommon && (
+            <div className="md:col-span-2">
+              <Controller name="available_in" control={control} render={({ field }) => (
+                <AvailableInField id="plan-available-in" what="plan" value={field.value} onChange={field.onChange}
+                  hint={plan?.common ? "Once members are on a common plan it can't move to one branch" : undefined} />
+              )} />
+            </div>
+          )}
           <Field label="Category" htmlFor="plan-category" required error={errors.category_id?.message}
             hint="Your own list; manage it with Categories on the Plans screen">
             <Select id="plan-category" invalid={!!errors.category_id} {...register("category_id")}>
@@ -314,7 +332,7 @@ export function PlanFormDrawer({ plan, defaultCategoryId = "", onClose }: PlanFo
           )}
           <div className="flex flex-col gap-3 md:col-span-2">
             <Controller name="all_branches" control={control} render={({ field }) => (
-              <Checkbox checked={field.value} onChange={field.onChange} label="Valid at all branches (check in anywhere)" />
+              <Checkbox checked={field.value} onChange={field.onChange} label="Check in at any branch (members on this plan can visit every branch)" />
             )} />
             <Controller name="is_active" control={control} render={({ field }) => (
               <Checkbox checked={field.value} onChange={field.onChange} label="Active: the desk can sell this plan" />
